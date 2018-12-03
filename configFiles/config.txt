@@ -18,7 +18,7 @@ target = /path/to/target_regions.bed
 ## [required] popolation names (comma-separated).
 name = popu1, popu2, popu3
 
-## [optional] abundance file (the agrument is noneffective if there is only one popolation defined in "name")
+## [optional] abundance file (the agrument is ineffective if there is only one popolation defined in "name")
 abundance = /path/to/abundance.txt
 
 ## [required] output directory
@@ -38,9 +38,6 @@ readLength = 150
 
 ## [required] sequencing coverage
 coverage = 30
-
-## [optional] genome ploidy to simulate (default: 2)
-ploidy = 2
 
 ## [optional] insert size for paired end sequencing (default: 350, only effective when the "layout" is set to "PE")
 insertSize = 250

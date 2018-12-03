@@ -798,8 +798,8 @@ void Genome::yieldReads() {
 		
 		string fqFilePrefix = config.getStringPara("outputDir")+"/";
 		if(config.isPairedEnd()) {
-			string outFile1 = fqFilePrefix+popuNames[0]+"_pe_1.fastq";
-			string outFile2 = fqFilePrefix+popuNames[0]+"_pe_2.fastq";
+			string outFile1 = fqFilePrefix+popuNames[0]+"_1.fq";
+			string outFile2 = fqFilePrefix+popuNames[0]+"_2.fq";
 			swp = new SeqWriter(outFile1, outFile2);
 		}
 		else {

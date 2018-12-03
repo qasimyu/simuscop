@@ -17,166 +17,155 @@
 
 #include "split.h"
 #include "MyDefine.h"
+#include "psiFunc.h"
 #include "Profile.h"
 
-Profile::Profile(void) {
-	nucleotides = "ACTGN";
-	init();
-}
-
-Profile::Profile(string &nucleotides) {
-	this->nucleotides = nucleotides;
-	init();
+Profile::Profile() {
+	subsDist1 = subsDist2 = NULL;
+	subsCdf1 = subsCdf2 = NULL;
+	qualityDist = qualityCdf = NULL;
 }
 
 Profile::~Profile() {
 	int i, j;
-		
-	baseAlphabet.clear();
-	qualityAlphabet.clear();
-	insertSizeAlphabet.clear();
-	if(gcAlphabets != NULL) {
-		for(i = 0; i < 101; i++) {
-			gcAlphabets[i].clear();
+	
+	string bases = config.getStringPara("bases");
+	int N = bases.length();
+	
+	if(subsDist1 != NULL) {
+		for(i = 0; i < kmerCount; i++) {
+			subsDist1[i].clear();
+			subsCdf1[i].clear();
 		}
-		delete[] gcAlphabets;
+		delete[] subsDist1;
+		delete[] subsCdf1;
+	}
+	if(subsDist2 != NULL) {
+		for(i = 0; i < kmerCount; i++) {
+			subsDist2[i].clear();
+			subsCdf2[i].clear();
+		}
+		delete[] subsDist2;
+		delete[] subsCdf2;
+	}
+	if(qualityDist != NULL) {
+		for(i = 0; i < N*N; i++) {
+			qualityDist[i].clear();
+			qualityCdf[i].clear();
+		}
+		delete[] qualityDist;
+		delete[] qualityCdf;
 	}
 	
-	for(i = 0; i < nucleotides.length(); i++) {
-		for(j = 0; j < binCount; j++) {
-			if(conditionalSubstitutionProbs1 != NULL) {
-				conditionalSubstitutionProbs1[i][j].clear();
-			}
-			if(conditionalSubstitutionIndxs1 != NULL) {
-				conditionalSubstitutionIndxs1[i][j].clear();
-			}
-			if(conditionalSubstitutionProbs2 != NULL) {
-				conditionalSubstitutionProbs2[i][j].clear();
-			}
-			if(conditionalSubstitutionIndxs2 != NULL) {
-				conditionalSubstitutionIndxs2[i][j].clear();
-			}
+	if(kmers != NULL) {
+		for(i = 0;i < kmerCount; i++) {
+			delete[] kmers[i];
 		}
-		if(conditionalSubstitutionProbs1 != NULL) {
-			delete[] conditionalSubstitutionProbs1[i];
-		}
-		if(conditionalSubstitutionIndxs1 != NULL) {
-			delete[] conditionalSubstitutionIndxs1[i];
-		}
-		if(conditionalSubstitutionProbs2 != NULL) {
-			delete[] conditionalSubstitutionProbs2[i];
-		}
-		if(conditionalSubstitutionIndxs2 != NULL) {
-			delete[] conditionalSubstitutionIndxs2[i];
-		}
+		delete[] kmers;
 	}
-	if(conditionalSubstitutionProbs1 != NULL) {
-		delete[] conditionalSubstitutionProbs1;
-	}
-	if(conditionalSubstitutionIndxs1 != NULL) {
-		delete[] conditionalSubstitutionIndxs1;
-	}
-	if(conditionalSubstitutionProbs2 != NULL) {
-		delete[] conditionalSubstitutionProbs2;
-	}
-	if(conditionalSubstitutionIndxs2 != NULL) {
-		delete[] conditionalSubstitutionIndxs2;
-	}
+	
+}
 
-	initSubstitutionIndxs1.clear();
-	initSubstitutionIndxs2.clear();
-	baseQualityIndxs.clear();
-	errorBaseQualityIndxs.clear();
-	insertSizeIndxs.clear();
-
-	if(gcDist != NULL) {
-		for(i = 0; i < 101; i++) {
-			gcDist[i].clear();
-		}
-		delete[] gcDist;
+void Profile::initKmers() {
+	string bases = config.getStringPara("bases");
+	int kmer = config.getIntPara("kmer");
+	int N = bases.length();
+	int *tmp = new int[kmer];
+	int i, j, k, n;
+	
+	kmerCount = 0;
+	for(i = kmer-1; i >= 0; i--) {
+		kmerCount += pow(N, kmer-i);
 	}
-	if(gcIndxs != NULL) {
-		for(i = 0; i < 101; i++) {
-			gcIndxs[i].clear();
-		}
-		delete[] gcIndxs;
+	kmers = new char*[kmerCount];
+	for(i = 0; i < kmerCount; i++) {
+		kmers[i] = new char[kmer+1];
+		kmers[i][kmer] = '\0';
 	}
-	if(gcValues != NULL) {
-		for(i = 0; i < 101; i++) {
-			gcValues[i].clear();
+	
+	k = 0;
+	for(j = kmer-1; j >= 0; j--) {
+		for(i = j; i < kmer; i++) {
+			tmp[i] = 0;
 		}
-		delete[] gcValues;
+		while(tmp[j] < N) {
+			KmerIndex *sIndx = &rIndex;
+			for(i = 0; i < j; i++) {
+				kmers[k][i] = 'X';
+				sIndx = &(sIndx->nextIndexs['X']);
+			}
+			for(; i < kmer; i++) {
+				char c = bases[tmp[i]];
+				kmers[k][i] = c;
+				sIndx = &(sIndx->nextIndexs[c]);
+			}
+			sIndx->index = k;
+			k++;
+			n = 1;
+			for(i = kmer-1; i > j; i--) {
+				if(n == 0) {
+					break;
+				}
+				tmp[i] += n;
+				if(tmp[i] == N) {
+					tmp[i] = 0;
+					n = 1;
+				}
+				else {
+					n = 0;
+				}
+			}
+			tmp[j] += n;
+		}
 	}
+	
+	delete[] tmp;
 }
 
 void Profile::init() {
 	minBaseQuality = 33;
 	maxBaseQuality = 126;
-	randomCount = 5000;
-	binCount = 50;
-
-	meanReadLength = 0;
-
-	int N = nucleotides.length();
 	
-	conditionalSubstitutionProbs1 = new Matrix<double>*[N];
-	conditionalSubstitutionProbs2 = new Matrix<double>*[N];
-	for(size_t i = 0; i < N; i++) {
-		conditionalSubstitutionProbs1[i] = new Matrix<double>[binCount];
-		conditionalSubstitutionProbs2[i] = new Matrix<double>[binCount];
-		for(size_t j = 0; j < binCount; j++) {
-			Matrix<double> csProbs(N, N, true);
-			conditionalSubstitutionProbs1[i][j] = csProbs;
-			conditionalSubstitutionProbs2[i][j] = csProbs;
-		}
+	indelRate = config.getRealPara("indelRate");
+	
+	int binCount = config.getIntPara("bins");
+	
+	initKmers();
+	
+	string bases = config.getStringPara("bases");
+	int N = bases.length();
+	
+	int i, j;
+	kmersDist.resize(binCount, kmerCount, 0);
+	
+	subsDist1 = new Matrix<double>[kmerCount];
+	subsDist2 = new Matrix<double>[kmerCount];
+	subsCdf1 = new Matrix<double>[kmerCount];
+	subsCdf2 = new Matrix<double>[kmerCount];
+	Matrix<double> tmp(binCount, N, 0);
+	for(i = 0; i < kmerCount; i++) {
+		subsDist1[i] = tmp;
+		subsDist2[i] = tmp;
 	}
-	initSubstitutionProbs1.resize(N, N, true);
-	initSubstitutionProbs2.resize(N, N, true);
 	
 	int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
-	baseQualityDist.resize(N, baseQualtiyCount, true);
-	errorBaseQualityDist.resize(N, baseQualtiyCount, true);
+	qualityDist = new Matrix<double>[N*N];
+	qualityCdf = new Matrix<double>[N*N];
+	Matrix<double> tmp1(binCount, baseQualtiyCount, 0);
+	for(i = 0; i < N*N; i++) {
+		qualityDist[i] = tmp1;
+	}
 	
-	insertSizeDist.resize(1, 1000, true);
-	stdInsertSize = 0;
-
-	conditionalSubstitutionIndxs1 = NULL;
-	conditionalSubstitutionIndxs2 = NULL;
-	
-	gcAlphabets = NULL;
-	gcDist = NULL;
-	gcIndxs = NULL;
-	gcValues = NULL;
+	iSizeDist.resize(1, 1000, true);
+	stdISize = 0;
 }
 
-int Profile::getIndexOfNucleotide(char nucleotide) {
-	for(size_t i = 0; i < nucleotides.length(); i++) {
-		if(nucleotide == nucleotides[i]) {
-			return i;
-		}
+int Profile::getKmerIndx(const char *s) {
+	KmerIndex *sIndx = &rIndex;
+	for(int i = 0; s[i] != '\0'; i++) {
+		sIndx = &(sIndx->nextIndexs[s[i]]);
 	}
-	return nucleotides.length()-1;
-}
-
-int Profile::calculateGCPercent(char* sequence) {
-	int gcCount = 0;
-	int nCount = 0;
-	if(sequence == NULL || sequence[0] == '\0') {
-		return 0;
-	}
-	int n = strlen(sequence);
-	for(size_t i = 0; i < n; i++) {
-		if(sequence[i] == 'G' || sequence[i] == 'C') {
-			gcCount++;
-		}
-		else if(sequence[i] == 'N') {
-			nCount++;
-		}
-	}
-	if(nCount > n/2) {
-		return 0;
-	}
-	return 100*gcCount/(n-nCount);
+	return sIndx->index;
 }
 
 int Profile::processRead(char* read) {
@@ -184,14 +173,15 @@ int Profile::processRead(char* read) {
 		return 0;
 	}
 
-	static int wgs = (genome.getInTargets().empty())? 1:0;
+	static int wxs = (genome.getInTargets().empty())? 0:1;
 	
 	static unsigned long readCount = 0;
-	static unsigned long maxCount = 200000000;
+	static unsigned long maxCount = 300000000;
 	static vector<string>& chromosomes = genome.getChroms();
 	vector<string>::iterator v_it;
+	static int binCount = config.getIntPara("bins");
 	
-	int i, j, n;
+	int i, j, k, n;
 	
 	/***check the number of fields of read***/
 	char* elems[20];
@@ -263,87 +253,91 @@ int Profile::processRead(char* read) {
 		isRead1 = 0;
 	}	
 	
-	/***update initSubstitutionProbs and conditionalSubstitutionProbs***/
-	int indx, indx1, indx2, binIndx;
-	indx1 = getIndexOfNucleotide(refSeq[0]);
-	indx2 = getIndexOfNucleotide(readSeq[0]);
-	if(indx1 != -1 && indx2 != -1) {
-		if(altSeq[0] == readSeq[0]) {
-			indx1 = indx2;
-		}
-		if(isRead1) {
-			i = initSubstitutionProbs1.get(indx1, indx2);
-			initSubstitutionProbs1.set(indx1, indx2, i+1);
+	/***update subsDist***/
+	int kmerIndx, refIndx, baseIndx, binIndx;
+	static int kmer = config.getIntPara("kmer");
+	n = strlen(refSeq);
+	
+	char seq[kmer+n];
+	for(i = 0; i < kmer-1; i++) {
+		seq[i] = 'X';
+	}
+	for(; i < kmer+n-1; i++) {
+		if(altSeq[i-kmer+1] == readSeq[i-kmer+1]) {
+			seq[i] = altSeq[i-kmer+1];
 		}
 		else {
-			i = initSubstitutionProbs2.get(indx1, indx2);
-			initSubstitutionProbs2.set(indx1, indx2, i+1);
+			seq[i] = refSeq[i-kmer+1];
 		}
 	}
-	n = strlen(refSeq);
-	for(i = 1; i < n; i++) {
-		indx = getIndexOfNucleotide(refSeq[i]);
-		
-		if(readSeq[i-1] == altSeq[i-1]) {
-			indx1 = getIndexOfNucleotide(altSeq[i-1]);
-		}
-		else {
-			indx1 = getIndexOfNucleotide(refSeq[i-1]);
-		}
-		
-		//indx1 = getIndexOfNucleotide(readSeq[i-1]);
-		indx2 = getIndexOfNucleotide(readSeq[i]);
+	for(i = 0; i < n; i++) {
+		baseIndx = getIndexOfBase(readSeq[i]);
 		binIndx = i*binCount/n;
-		if(indx != -1 && indx1 != -1 && indx2 != -1) {
-			if(altSeq[i] == readSeq[i]) {
-				indx = indx2;
+		if(baseIndx != -1) {
+			
+			char c = seq[i+kmer];
+			seq[i+kmer] = '\0';
+			kmerIndx = getKmerIndx(&seq[i]);
+			seq[i+kmer] = c;
+			
+			if(kmerIndx == -1) {
+				continue;
 			}
+			
 			if(isRead1) {
-				j = conditionalSubstitutionProbs1[indx][binIndx].get(indx1, indx2);
-				conditionalSubstitutionProbs1[indx][binIndx].set(indx1, indx2, j+1);
+				k = subsDist1[kmerIndx].get(binIndx, baseIndx);
+				subsDist1[kmerIndx].set(binIndx, baseIndx, k+1);
 			}
 			else {
-				j = conditionalSubstitutionProbs2[indx][binIndx].get(indx1, indx2);
-				conditionalSubstitutionProbs2[indx][binIndx].set(indx1, indx2, j+1);
+				k = subsDist2[kmerIndx].get(binIndx, baseIndx);
+				subsDist2[kmerIndx].set(binIndx, baseIndx, k+1);
 			}
+			
+			k = kmersDist.get(binIndx, kmerIndx);
+			kmersDist.set(binIndx, kmerIndx, k+1);
 		}
 	}
 	
 	/***update insert sizeset distribution***/
 	//if(config.isPairedEnd() && tlen > 0) {
 	if(tlen > 0) {
-		if(tlen > insertSizeDist.getCOLS()-1) {
-			insertSizeDist.resize(1, tlen+1, true);
+		if(tlen > iSizeDist.getCOLS()-1) {
+			iSizeDist.resize(1, tlen+1, true);
 		}
-		insertSizeDist.set(0, tlen, insertSizeDist.get(0, tlen)+1);
+		iSizeDist.set(0, tlen, iSizeDist.get(0, tlen)+1);
 	}
 	
+	int indx;
+	static string bases = config.getStringPara("bases");
+	int N = bases.length();
 	/***update base quality distribution***/
 	if(strlen(baseQuality) == strlen(readSeq)) {
 		n = strlen(readSeq);
 		for(i = 0; i < n; i++) {
-			indx1 = getIndexOfNucleotide(readSeq[i]);
-			if(indx1 == -1) {
+			refIndx = getIndexOfBase(refSeq[i]);
+			binIndx = i*binCount/n;
+			baseIndx = getIndexOfBase(readSeq[i]);
+			if(refIndx == -1 || baseIndx == -1) {
 				continue;
 			}
-			int k = baseQuality[i];
-			//int k = baseQuality[i]-33;
+			if(altSeq[i] == readSeq[i]) {
+				refIndx = getIndexOfBase(altSeq[i]);
+			}
+			indx = refIndx*N+baseIndx;
 			
-			if(k >= minBaseQuality && k <= maxBaseQuality) {
-				k -= minBaseQuality;
-				if(refSeq[i] == readSeq[i] || altSeq[i] == readSeq[i]) {
-					baseQualityDist.set(indx1, k, baseQualityDist.get(indx1, k)+1);
-				}
-				else {
-					errorBaseQualityDist.set(indx1, k, errorBaseQualityDist.get(indx1, k)+1);
-				}
+			j = baseQuality[i];
+			//int j = baseQuality[i]-33;
+			
+			if(j >= minBaseQuality && j <= maxBaseQuality) {
+				//qualityData[indx][binIndx].push_back(j);
+				j -= minBaseQuality;
+				k = qualityDist[indx].get(binIndx, j);
+				qualityDist[indx].set(binIndx, j, k+1);
 			}
 		}
 	}
-
-	/***update mean read length***/
+	
 	readCount++;
-	meanReadLength = ((readCount-1)*meanReadLength+strlen(readSeq))/readCount;	
 	
 	/*
 	if(config.isVerbose() && readCount%1000000 == 0) {
@@ -357,7 +351,7 @@ int Profile::processRead(char* read) {
 	delete[] refSeq;
 	delete[] altSeq;
 	
-	if(wgs == 1 && readCount >= maxCount) {
+	if(wxs == 0 && readCount >= maxCount) {
 		return 2;
 	}
 	/*
@@ -365,7 +359,7 @@ int Profile::processRead(char* read) {
 		return 0;
 	}
 	*/
-	if(wgs == 0 && readCount >= 2*maxCount) {
+	if(wxs == 1 && readCount >= 2*maxCount) {
 		return 2;
 	}
 	return 1;
@@ -379,17 +373,26 @@ int Profile::countGC(string chr, long position) {
 	static unsigned int winSize = Segment::getFragmentSize();
 	static long rightPos = 0;
 	static long leftPos = -1;
-	static int GC = -1;
-	static double rc = 0;
-	static int wgs = (genome.getInTargets().empty())? 1:0;
+	static double GC = -1;
+	static int rc = 0;
+	static int wxs = (genome.getInTargets().empty())? 0:1;
+	
+	static vector<string>& chromosomes = genome.getChroms(); 
 
 	static int targetIndx = -1;
 	
 	char* refSeq;
 
 	position -= 1;
-
-	if(chr.compare("X") == 0 || chr.compare("Y") == 0 || chr.compare("M") == 0 || chr.compare("MT") == 0) {
+	
+	int i, k;
+	for(i = 0; i < chr.length(); i++) {
+		k = chr[i]-'0';
+		if(!(k >= 0 && k <= 9)) {
+			break;
+		}
+	}
+	if(i < chr.length()) {
 		return -1;
 	}
 	
@@ -404,17 +407,19 @@ int Profile::countGC(string chr, long position) {
 			rc++;
 			return 1;
 		}
-		if(GC != -1 && rc > 0) {
-			if(wgs == 1) {
-				readCountsByGC[GC].push_back(rc);
+		if(GC > 0 && rc > 0) {
+			if(wxs == 0) {
+				gcs.push_back(GC);
+				readCounts.push_back(rc);
 			}
 			else {
 				int targetSize = rightPos-leftPos+1;
 				rc = winSize*rc/targetSize;
-				readCountsByGC[GC].push_back(rc);
+				gcs.push_back(GC);
+				readCounts.push_back(rc);
 			}
 		}
-		if(wgs == 1) {
+		if(wxs == 0) {
 			rightPos += winSize;
 			while(rightPos < position) {
 				rightPos += winSize;
@@ -457,7 +462,7 @@ int Profile::countGC(string chr, long position) {
 			}
 		}
 		if(refSeq != NULL) {
-			GC = calculateGCPercent(refSeq);
+			GC = calculateGCContent(refSeq);
 			delete[] refSeq;
 		}
 		else {
@@ -466,14 +471,16 @@ int Profile::countGC(string chr, long position) {
 		return rc;
 	}
 	else {
-		if(preChr.compare("") != 0 && GC != -1) {
-			if(wgs == 1) {
-				readCountsByGC[GC].push_back(rc);
+		if(preChr.compare("") != 0 && GC > 0 && rc > 0) {
+			if(wxs == 0) {
+				gcs.push_back(GC);
+				readCounts.push_back(rc);
 			}
 			else {
 				int targetSize = rightPos-leftPos+1;
 				rc = winSize*rc/targetSize;
-				readCountsByGC[GC].push_back(rc);
+				gcs.push_back(GC);
+				readCounts.push_back(rc);
 			}
 		}
 		
@@ -492,7 +499,7 @@ int Profile::countGC(string chr, long position) {
 			}
 
 			rightPos = -1;
-			if(wgs == 1) {
+			if(wxs == 0) {
 				rightPos += winSize;
 				while(rightPos < position) {
 					rightPos += winSize;
@@ -535,7 +542,7 @@ int Profile::countGC(string chr, long position) {
 			}
 		}
 		if(refSeq != NULL) {
-			GC = calculateGCPercent(refSeq);
+			GC = calculateGCContent(refSeq);
 			delete[] refSeq;
 		}
 		else {
@@ -546,89 +553,195 @@ int Profile::countGC(string chr, long position) {
 	
 }
 
-void Profile::estimateCoverage() {
-	int i, j;
-	vector<double> tmp;
-	map<int, vector<double> >::iterator it;
-	for(it = readCountsByGC.begin(); it != readCountsByGC.end(); it++) {
-		vector<double>& readCounts = (*it).second;
-		tmp.insert(tmp.begin(), readCounts.begin(), readCounts.end());
-	}
-	sort(tmp.begin(), tmp.end());
-
-	int medRC;
-	long n = tmp.size();
-	if(n%2 != 0) {
-		medRC = tmp[n/2];
-	}
-	else {
-		medRC = (tmp[n/2]+tmp[n/2-1])/2;
-	}
-	tmp.clear();
-
-	//cerr << "meanReadLength:" << meanReadLength << endl;
-
-	unsigned int winSize = Segment::getFragmentSize();
-	estimatedCoverage = meanReadLength*medRC/winSize;
-	//cerr << "estimatedCoverage:" << estimatedCoverage << endl;
-	
-}
-
-void Profile::initGCFactors() {
+void Profile::initGCParas() {
 	int i;
 	for(i = 0; i < 101; i++) {
-		gcFactors[i] = 5;
-		gcStds[i] = 0;
+		gcMeans[i] = 1;
 	}
-	estimatedCoverage = 0;
+	gcStd = 1.0e-5;
 }
 
-void Profile::initParas(bool isLoaded) {
+void Profile::estimateGCParas(string outFile) {
 	int i, j, k;
-	/***normalize probability matrix***/
-	for(i = 0; i < nucleotides.length(); i++) {
-		for(j = 0; j < binCount; j++) {
-			conditionalSubstitutionProbs1[i][j].normalize(0);
-			conditionalSubstitutionProbs2[i][j].normalize(0);
+	
+	int bins = 50;
+	int *counts = new int[bins];
+	memset(counts, 0, bins*sizeof(int));
+	for(i = 0; i < gcs.size(); i++) {
+		j = gcs[i]*bins;
+		counts[j]++;
+	}
+	int expectCount = min(150000, (int) gcs.size())/bins;
+	int *steps = new int[bins];
+	for(i = 0; i < bins; i++) {
+		steps[i] = max(1, counts[i]/expectCount);
+	}
+	delete[] counts;
+	
+	outFile = outFile + ".gc";
+	ofstream ofs;
+	ofs.open(outFile.c_str());
+	vector<int> indxs;
+	int *curCount = new int[bins];
+	double med_rc = median(readCounts);
+	for(i = 0; i < readCounts.size(); i++) {
+		j = gcs[i]*bins;
+		if(curCount[j]%steps[j] == 0) {
+			//readCounts[i] = log(readCounts[i]/med_rc+ZERO_FINAL);
+			readCounts[i] = readCounts[i]/(med_rc+ZERO_FINAL);
+			if(readCounts[i] < 3) {
+				ofs << readCounts[i] << '\t' << gcs[i] << endl;
+				indxs.push_back(i);
+			}
+		}
+		curCount[j]++;
+	}
+	delete[] curCount;
+	delete[] steps;
+	ofs.close();
+	
+	/*fitting locally weighted linear regression*/
+	double tau = 5;
+	double winSize = 0.03;
+	Matrix<double> x(1, 2);
+	x.set(0, 0, 1);
+	int minGC = -1, maxGC = -1;
+	for(k = 0; k <= 100; k++) {
+		double gc = k/100.0;
+		x.set(0, 1, gc);
+		
+		vector<double> gcInWin, rcInWin;
+		for(i = 0; i < indxs.size(); i++) {
+			j = indxs[i];
+			if(fabs(gc-gcs[j]) <= winSize/2) {
+				gcInWin.push_back(gcs[j]);
+				rcInWin.push_back(readCounts[j]);
+			}
+			/*
+			if(gcInWin.size() > 2000) {
+				break;
+			}
+			*/
+		}
+		if(gcInWin.size() > 20) {
+			if(minGC == -1) {
+				minGC = k;
+			}
+			maxGC = k;
+			Matrix<double> B(gcInWin.size(), 2);
+			Matrix<double> y(gcInWin.size(), 1);
+			for(i = 0; i < gcInWin.size(); i++) {
+				B.set(i, 0, 1);
+				B.set(i, 1, gcInWin[i]);
+				y.set(i, 0, rcInWin[i]);
+			}
+			gcInWin.clear();
+			rcInWin.clear();
+			/*
+			cerr << "B:" << endl;
+			B.Print();
+			cerr << "y:" << endl;
+			y.Print();
+			*/
+			Matrix<double> W(B.getROWS(), B.getROWS(), 0);
+			for(i = 0; i < B.getROWS(); i++) {
+				double v = exp(-pow(B.get(i, 1)-gc, 2)/(2*tau));
+				W.set(i, i, v);
+			}
+			//cerr << "W:" << endl;
+			//W.Print();
+			
+			Matrix<double> beta = (B.transpose()*W*B).inverse()*B.transpose()*W*y;
+			//cerr << "beta:" << endl;
+			//beta.Print();
+			Matrix<double> y_predict = x*beta;
+			gcMeans[k] = max(0.0, y_predict.get(0, 0));
+		}
+		else {
+			gcMeans[k] = 0;
 		}
 	}
 	
-	initSubstitutionProbs1.normalize(0);
-	initSubstitutionProbs2.normalize(0);
+	for(k = 0; k < minGC; k++) {
+		gcMeans[k] = gcMeans[minGC]*k/minGC;
+	}
+	for(k = maxGC+1; k <= 100; k++) {
+		gcMeans[k] = gcMeans[maxGC]-gcMeans[maxGC]*(k-maxGC)/(100-maxGC);
+	}
 	
-	baseQualityDist.normalize(0);
+	/*calculate standrad deviation*/
+	gcStd = 0;
+	for(i = 0; i < indxs.size(); i++) {
+		j = indxs[i];
+		k = gcs[j]*100;
+		gcStd += pow(readCounts[j]-gcMeans[k], 2);
+	}
+	gcStd = sqrt(gcStd/indxs.size());
+	cerr << "read counts std: " << gcStd << endl;
+	
+	gcs.clear();
+	readCounts.clear();
+}
 
-	errorBaseQualityDist.normalize(0);
+void Profile::normParas(bool isLoaded) {
+	int i, j, k;
+	string bases = config.getStringPara("bases");
+	int N = bases.length();
+	int kmer = config.getIntPara("kmer");
+	int binCount = config.getIntPara("bins");
+	/***normalize probability matrix***/
+	kmersDist.normalize(0);
+	for(i = 0; i < kmerCount; i++) {
+		subsDist1[i].normalize(0);
+		int indx = getIndexOfBase(kmers[i][kmer-1]);
+		Matrix<double> tmp = subsDist1[i].sumCols();
+		for(j = 0; j < binCount; j++) {
+			if(tmp.get(0, j) < ZERO_FINAL) {
+				subsDist1[i].set(j, indx, 1);
+			}
+		}
+		
+		subsDist2[i].normalize(0);
+		tmp = subsDist2[i].sumCols();
+		for(j = 0; j < binCount; j++) {
+			if(tmp.get(0, j) < ZERO_FINAL) {
+				subsDist2[i].set(j, indx, 1);
+			}
+		}
+	}
+	
+	for(i = 0; i < N*N; i++) {
+		qualityDist[i].normalize(0);
+	}
 	
 	if(!isLoaded) {
 		int maxCount = 0;
 		j = 0;
-		for(i = 0; i < insertSizeDist.getCOLS(); i++) {
-			if(insertSizeDist.get(0, i) > maxCount) {
-				maxCount = insertSizeDist.get(0, i);
+		for(i = 0; i < iSizeDist.getCOLS(); i++) {
+			if(iSizeDist.get(0, i) > maxCount) {
+				maxCount = iSizeDist.get(0, i);
 				j = i;
 			}
 		}
 		
-		for(i = j*5; i < insertSizeDist.getCOLS(); i++) {
-			insertSizeDist.set(0, i, 0);
+		for(i = j*5; i < iSizeDist.getCOLS(); i++) {
+			iSizeDist.set(0, i, 0);
 		}
 
-		insertSizeDist.normalize(0);
+		iSizeDist.normalize(0);
 		double meanTlen = 0;
-		for(i = 0; i < insertSizeDist.getCOLS(); i++) {
-			meanTlen += insertSizeDist.get(0, i)*i;
+		for(i = 0; i < iSizeDist.getCOLS(); i++) {
+			meanTlen += iSizeDist.get(0, i)*i;
 		}
-		stdInsertSize = 0;
-		for(i = 0; i < insertSizeDist.getCOLS(); i++) {
-			stdInsertSize += insertSizeDist.get(0, i)*pow(i-meanTlen, 2);
+		stdISize = 0;
+		for(i = 0; i < iSizeDist.getCOLS(); i++) {
+			stdISize += iSizeDist.get(0, i)*pow(i-meanTlen, 2);
 		}
-		stdInsertSize = sqrt(stdInsertSize);
-		//cerr << "stdInsertSize: " << stdInsertSize << endl;
-		//insertSizeDist.clear();
+		stdISize = sqrt(stdISize);
+		//cerr << "stdISize: " << stdISize << endl;
+		//iSizeDist.clear();
 	}
 	else {
-		int N = nucleotides.length();
 		baseAlphabet.resize(1, N, false);
 		for(i = 0; i < N; i++) {
 			baseAlphabet.set(0, i, i);
@@ -639,212 +752,55 @@ void Profile::initParas(bool isLoaded) {
 			qualityAlphabet.set(0, i, j);
 		}
 	
-		if(config.isPairedEnd() && stdInsertSize > 0) {
+		if(config.isPairedEnd() && stdISize > 0) {
 			int meanInsertSize = config.getIntPara("insertSize")+1;
-			int intervalLen = 6 * stdInsertSize;
+			int intervalLen = 6 * stdISize;
 			int minInsertSize = max(meanInsertSize - intervalLen/2, config.getIntPara("readLength"));
 			int maxInsertSize = 2*meanInsertSize - minInsertSize;
-			//cerr << stdInsertSize << endl;
+			//cerr << stdISize << endl;
 			//cerr << minInsertSize << '\t' << maxInsertSize << '\t' << meanInsertSize << endl;
-			insertSizeAlphabet.resize(1, maxInsertSize-minInsertSize+1, false);
-			for(i = 0; i < insertSizeAlphabet.getCOLS(); i++) {
-				insertSizeAlphabet.set(0, i, minInsertSize++);
+			iSizeAlphabet.resize(1, maxInsertSize-minInsertSize+1, false);
+			for(i = 0; i < iSizeAlphabet.getCOLS(); i++) {
+				iSizeAlphabet.set(0, i, minInsertSize++);
 			}
 		
-			insertSizeDist.resize(1, insertSizeAlphabet.getCOLS(), false);
-			insertSizeIndxs.resize(1, randomCount*insertSizeAlphabet.getCOLS(), false);
-			for(i = 0; i < insertSizeDist.getCOLS(); i++) {
-				double pdf = normpdf(insertSizeAlphabet.get(0, i), meanInsertSize, stdInsertSize);
-				insertSizeDist.set(0, i, pdf);
+			iSizeDist.resize(1, iSizeAlphabet.getCOLS(), false);
+			for(i = 0; i < iSizeDist.getCOLS(); i++) {
+				double pdf = normpdf(iSizeAlphabet.get(0, i), meanInsertSize, stdISize);
+				iSizeDist.set(0, i, pdf);
 			}
-			insertSizeDist.normalize(0);
-			//insertSizeCdf = insertSizeDist.cumsum();
-			//insertSizeDist.clear();
+			iSizeDist.normalize(0);
 		}
-		
-		conditionalSubstitutionIndxs1 = new Matrix<int>*[N];
-		conditionalSubstitutionIndxs2 = new Matrix<int>*[N];
-		for(i = 0; i < N; i++) {
-			conditionalSubstitutionIndxs1[i] = new Matrix<int>[binCount];
-			conditionalSubstitutionIndxs2[i] = new Matrix<int>[binCount];
-			for(size_t j = 0; j < binCount; j++) {
-				Matrix<int> csIndxs(N, randomCount*N, false);
-				conditionalSubstitutionIndxs1[i][j] = csIndxs;
-				conditionalSubstitutionIndxs2[i][j] = csIndxs;
-			}
-		}
-		initSubstitutionIndxs1.resize(N, randomCount*N, false);
-		initSubstitutionIndxs2.resize(N, randomCount*N, false);
-	
-		baseQualityIndxs.resize(N, randomCount*baseQualtiyCount, false);
-		errorBaseQualityIndxs.resize(N, randomCount*baseQualtiyCount, false);
-		
-		gcValues = new Matrix<double>[101];
 	}
 }
 
-void Profile::evaluateGC() {
-	int i, j, k;
-	/*calculate median value*/
-	memset(gcFactors, 0, 101*sizeof(double));
-	map<int, vector<double> >::iterator it;
-	double minFactor = -1;
-	int minGC, maxGC;
-	for(it = readCountsByGC.begin(); it != readCountsByGC.end(); it++) {
-		int gc = (*it).first;
-		vector<double>& readCounts = (*it).second;
-		sort(readCounts.begin(), readCounts.end());
-
-		if(readCounts.size() > 10) {
-			int n = readCounts.size()/100;
-		
-			int m = readCounts.size()-2*n;
-			if(m%2 == 0) {
-				gcFactors[gc] = (readCounts[n+m/2-1]+readCounts[n+m/2])/2;
-			}
-			else {
-				gcFactors[gc] = readCounts[n+m/2];
-			}
-		}
-		else {
-			gcFactors[gc] = 0;
-		}
-
-		if(it == readCountsByGC.begin()) {
-			minGC = gc;
-		}
-		maxGC = gc;
-
-		if(minFactor < 0 || minFactor > gcFactors[gc]) {
-			minFactor = gcFactors[gc];
-		}
-	}
-	//double minFactor = *min_element(gcFactors, gcFactors+101);
-	//cerr << minFactor << endl;
-
-	/*interpolation*/
-	Matrix<double> B(maxGC-minGC+1, 2, false);
-	Matrix<double> y(maxGC-minGC+1, 1, false);
-	for(i = minGC; i <= maxGC; i++) {
-		if(gcFactors[i] == 0) {
-			if(i > 0) {
-				double y1 = gcFactors[i-1];
-				double y2;
-				for(j = i+1; j < 101; j++) {
-					if(gcFactors[j] > 0) {
-						y2 = gcFactors[j];
-						break;
-					}
-				}
-				if(j == 101) {
-					y2 = minFactor;
-					j = 100;
-				}
-				gcFactors[i] = (y2-y1)/(j-i+1)+y1;
-			}
-			else {
-				gcFactors[i] = minFactor;
-			}
-		}
-		B.set(i-minGC, 0, 1);
-		B.set(i-minGC, 1, i);
-		y.set(i-minGC, 0, gcFactors[i]);
-		//cerr << "gc=" << i << ", mean=" << gcFactors[i] << endl;
-	}
-	
-	/*fitting locally weighted linear regression*/
-	double tau = 5;
-	for(i = minGC; i <= maxGC; i++) {
-	//for(i = 0; i < 101; i++) {
-		Matrix<double> W(B.getROWS(), B.getROWS(), true);
-		for(j = minGC; j <= maxGC; j++) {
-		//for(j = 0; j < 101; j++) {
-			double v = exp(-pow((double)(i-j), 2)/(2*tau));
-			W.set(j-minGC, j-minGC, v);
-			//W.set(j, j, v);
-		}
-		Matrix<double> beta = (B.transpose()*W*B).inverse()*B.transpose()*W*y;
-		Matrix<double> y_predict = B.Row(i-minGC)*beta;
-		//Matrix<double> y_predict = B.Row(i)*beta;
-		gcFactors[i] = max(0.0, y_predict.get(0, 0));
-	}
-	
-	/*calculate standrad deviation*/
-	for(i = 0; i < 101; i++) {
-		vector<double> readCounts = readCountsByGC[i];
-		if(readCounts.empty()) {
-			gcStds[i] = 0;
-		}
-		else {
-			int n = 10*readCounts.size()/100;
-			gcStds[i] = 0;
-			double avg = 0;
-			for(j = n; j < readCounts.size()-n; j++) {
-				avg += readCounts[j];
-			}
-			avg /= (readCounts.size()-2*n);
-			for(j = n; j < readCounts.size()-n; j++) {
-				gcStds[i] += pow(readCounts[j]-avg, 2);
-			}
-			gcStds[i] = sqrt(gcStds[i]/(readCounts.size()-2*n));
-			gcStds[i] *= pow(gcFactors[i]/avg, 2);
-		}
-		//cerr << "gc=" << i << ", mean=" << gcFactors[i] << ", stdev=" << gcStds[i] << endl;
-	}
-	
-	readCountsByGC.clear();
-}
-
-bool Profile::getNextLine(ifstream& ifs, string& line, int& lineNum) {
-	line = "";
-	while(getline(ifs, line)) {
-		lineNum++;
-		if(!line.empty() && line.at(0) != '#') {
-			break;
-		}
-	}
-	if(line.empty()) {
-		return false;
-	}
-	return true;
-}
-
-void Profile::load(string modelFile) {
+void Profile::load(string proFile) {
 	ifstream ifs;
-	ifs.open(modelFile.c_str());
+	ifs.open(proFile.c_str());
 	if(!ifs.is_open()) {
-		cerr << "can not open file " << modelFile << endl;
+		cerr << "can not open file " << proFile << endl;
 		exit(-1);
 	}
 	
 	string line;
 	int lineNum = 0;
 	
-	estimatedCoverage = -1;
-	nucleotides = "";
-	binCount = -1;
-
-	int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
+	string bases = "";
+	int binCount = -1;
+	int kmer = -1;
 	
-	string errMsg = "Error: malformed model file "+modelFile+" @line ";
+	string errMsg = "Error: malformed model file "+proFile+" @line ";
 	
-	// parse "coverage", "nucleotides" and "binCount"
+	// parse "coverage", "bases" and "binCount"
 	while(getNextLine(ifs, line, lineNum)) {
 		vector<string> fields = split(line, ':');
 		if(fields.size() != 2) {
 			cerr << errMsg << lineNum << "\n" << line;
 			exit(1);
 		}
-		if(trim(fields[0]).compare("estimated sequencing coverage") == 0) {
-			estimatedCoverage = atoi(trim(fields[1]).c_str());
-			if(estimatedCoverage <= 0) {
-				cerr << errMsg << lineNum << "\n" << line;
-				exit(1);
-			}
-		}
-		else if(trim(fields[0]).compare("nucleotides") == 0) {
-			nucleotides = trim(fields[1]);
-			if(nucleotides.empty()) {
+		if(trim(fields[0]).compare("bases") == 0) {
+			bases = trim(fields[1]);
+			if(bases.empty()) {
 				cerr << errMsg << lineNum << "\n" << line;
 				exit(1);
 			}
@@ -856,149 +812,141 @@ void Profile::load(string modelFile) {
 				exit(1);
 			}
 		}
+		else if(trim(fields[0]).compare("kmer") == 0) {
+			kmer = atoi(trim(fields[1]).c_str());
+			if(kmer <= 0) {
+				cerr << errMsg << lineNum << "\n" << line;
+				exit(1);
+			}
+		}
 		else {
 			cerr << errMsg << lineNum << "\n" << line;
 			exit(1);
 		}
-		if(estimatedCoverage > 0 && !nucleotides.empty() && binCount > 0) {
+		if(!bases.empty() && binCount > 0 && kmer > 0) {
 			break;
 		}
 	}
-	if(estimatedCoverage < 0 || nucleotides.empty() || binCount < 0) {
-		cerr << "Error: malformed model file " << modelFile << endl;
+	if(bases.empty() || binCount <= 0 || kmer <= 0) {
+		cerr << "Error: malformed model file " << proFile << endl;
 		exit(1);
 	}
-
-	int N = nucleotides.length();
 	
+	config.setStringPara("bases", bases);
+	config.setIntPara("kmer", kmer);
+	config.setIntPara("bins", binCount);
+	
+	init();
+
 	int i, j, k, l;
+	int N = bases.length();
+	int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
+	
 	int paraLoadedCount = 0;
 	vector<string> fields;
 	while(getNextLine(ifs, line, lineNum)) {
-		if(line.compare("[Initial Substitution Probs]") == 0) {
-			for(j = 0; j < N*2; j++) {
+		if(line.compare("[Kmer Distribution]") == 0) {
+			for(j = 0; j < binCount; j++) {
 				if(getNextLine(ifs, line, lineNum)) {
 					fields = split(line, '\t');
-					if(fields.size() != N) {
-						cerr << errMsg << lineNum << "\n" << line;
+					if(fields.size() != kmerCount) {
+						cerr << errMsg << lineNum << "\n" << line << endl;
 						exit(1);
 					}
-					for(k = 0; k < N; k++) {
+					for(k = 0; k < kmerCount; k++) {
 						double prob = atof(trim(fields[k]).c_str());
-						if(j < N) {
-							initSubstitutionProbs1.set(j, k, prob);
-						}
-						else {
-							initSubstitutionProbs2.set(j-N, k, prob);
-						}
+						kmersDist.set(j, k, prob);
 					}
 				}
 				else {
-					cerr << "Error: malformed model file " << modelFile << endl;
+					cerr << "Error: malformed profile file " << proFile << endl;
 					exit(1);
 				}
 			}
 			paraLoadedCount++;
 		}
-		else if(line.compare("[Conditional Substitution Probs]") == 0) {
-			for(i = 0; i < N; i++) {
+		else if(line.compare("[Substitution Probs]") == 0) {
+			for(i = 0; i < kmerCount; i++) {
 				if(getNextLine(ifs, line, lineNum)) {
 					fields = split(line, ':');
-					if(fields.size() != 2 || trim(fields[0]).compare("Nucleotide") != 0) {
+					if(fields.size() != 2 || trim(fields[0]).compare("kmer") != 0) {
 						cerr << errMsg << lineNum << "\n" << line << endl;
 						exit(1);
 					}
-					char nucle = trim(fields[1]).at(0);
-					int nucleIndx = nucleotides.find(nucle);
-					if(nucleIndx == string::npos) {
-						cerr << "Error: unrecognized nucleotide @line " << lineNum <<
-								" in model file " << modelFile << endl;
+					fields[1] = trim(fields[1]);
+					int kmerIndx = getKmerIndx(fields[1].c_str());
+					if(kmerIndx == -1) {
+						cerr << "Error: unrecognized kmer @line " << lineNum <<
+								" in profile file " << proFile << endl;
 						cerr << line << endl;
 						exit(1);
 					}
-					for(l = 0; l < binCount; l++) {
+					for(j = 0; j < binCount*2; j++) {
 						if(getNextLine(ifs, line, lineNum)) {
-							fields = split(line, ':');
-							if(fields.size() != 2 || trim(fields[0]).compare("binIndx") != 0) {
+							fields = split(line, '\t');
+							if(fields.size() != N) {
 								cerr << errMsg << lineNum << "\n" << line << endl;
 								exit(1);
 							}
-							int binIndx = atoi(trim(fields[1]).c_str());
-							if(binIndx < 0 || binIndx >= binCount) {
-								cerr << errMsg << lineNum << "\n" << line << endl;
-								exit(1);
-							}
-							for(j = 0; j < N*2; j++) {
-								if(getNextLine(ifs, line, lineNum)) {
-									fields = split(line, '\t');
-									if(fields.size() != N) {
-										cerr << errMsg << lineNum << "\n" << line << endl;
-										exit(1);
-									}
-									for(k = 0; k < N; k++) {
-										double prob = atof(trim(fields[k]).c_str());
-										if(j < N) {
-											conditionalSubstitutionProbs1[nucleIndx][binIndx].set(j, k, prob);
-										}
-										else {
-											conditionalSubstitutionProbs2[nucleIndx][binIndx].set(j-N, k, prob);
-										}
-									}
+							for(k = 0; k < N; k++) {
+								double prob = atof(trim(fields[k]).c_str());
+								if(j < binCount) {
+									subsDist1[kmerIndx].set(j, k, prob);
 								}
 								else {
-									cerr << "Error: malformed model file " << modelFile << endl;
-									exit(1);
+									subsDist2[kmerIndx].set(j-binCount, k, prob);
 								}
 							}
 						}
 						else {
-							cerr << "Error: malformed model file " << modelFile << endl;
+							cerr << "Error: malformed profile file " << proFile << endl;
 							exit(1);
 						}
 					}
 				}
 				else {
-					cerr << "Error: malformed model file " << modelFile << endl;
+					cerr << "Error: malformed profile file " << proFile << endl;
 					exit(1);
 				}
 			}
 			paraLoadedCount++;
 		}
 		else if(line.compare("[Base Quality Distribution]") == 0) {
-			for(j = 0; j < N; j++) {
+			for(i = 0; i < N*N; i++) {
 				if(getNextLine(ifs, line, lineNum)) {
-					fields = split(line, '\t');
-					if(fields.size() != baseQualtiyCount) {
+					fields = split(line, ':');
+					if(fields.size() != 2 || trim(fields[0]).compare("basePairIndx") != 0) {
 						cerr << errMsg << lineNum << "\n" << line << endl;
 						exit(1);
 					}
-					for(k = 0; k < baseQualtiyCount; k++) {
-						double prob = atof(trim(fields[k]).c_str());
-						baseQualityDist.set(j, k, prob);
-					}
-				}
-				else {
-					cerr << "Error: malformed model file " << modelFile << endl;
-					exit(1);
-				}
-			}
-			paraLoadedCount++;
-		}
-		else if(line.compare("[Error Base Quality Distribution]") == 0) {
-			for(j = 0; j < N; j++) {
-				if(getNextLine(ifs, line, lineNum)) {
-					fields = split(line, '\t');
-					if(fields.size() != baseQualtiyCount) {
-						cerr << errMsg << lineNum << "\n" << line << endl;
+					fields[1] = trim(fields[1]);
+					int basePairIndx = atoi(fields[1].c_str());
+					if(basePairIndx < 0 || basePairIndx > N*N-1) {
+						cerr << "Error: unrecognized basePairIndx @line " << lineNum <<
+								" in profile file " << proFile << endl;
+						cerr << line << endl;
 						exit(1);
 					}
-					for(k = 0; k < baseQualtiyCount; k++) {
-						double prob = atof(trim(fields[k]).c_str());
-						errorBaseQualityDist.set(j, k, prob);
+					for(j = 0; j < binCount; j++) {
+						if(getNextLine(ifs, line, lineNum)) {
+							fields = split(line, '\t');
+							if(fields.size() != baseQualtiyCount) {
+								cerr << errMsg << lineNum << "\n" << line << endl;
+								exit(1);
+							}
+							for(k = 0; k < baseQualtiyCount; k++) {
+								double prob = atof(trim(fields[k]).c_str());
+								qualityDist[basePairIndx].set(j, k, prob);
+							}
+						}
+						else {
+							cerr << "Error: malformed profile file " << proFile << endl;
+							exit(1);
+						}
 					}
 				}
 				else {
-					cerr << "Error: malformed model file " << modelFile << endl;
+					cerr << "Error: malformed profile file " << proFile << endl;
 					exit(1);
 				}
 			}
@@ -1010,32 +958,44 @@ void Profile::load(string modelFile) {
 					cerr << errMsg << lineNum << "\n" << line << endl;
 					exit(1);
 				}
-				stdInsertSize = atof(trim(line).c_str());
+				stdISize = atof(trim(line).c_str());
 			}
 			else {
-				cerr << "Error: malformed model file " << modelFile << endl;
+				cerr << "Error: malformed model file " << proFile << endl;
 				exit(1);
 			}
 			paraLoadedCount++;
 		}
-		else if(line.compare("[GC-content Factors]") == 0) {
+		else if(line.compare("[Log Ratio Mean Value]") == 0) {
 			for(j = 0; j < 101; j++) {
 				if(getNextLine(ifs, line, lineNum)) {
 					fields = split(line, '\t');
-					if(fields.size() != 3) {
+					if(fields.size() != 2) {
 						cerr << errMsg << lineNum << "\n" << line << endl;
 						exit(1);
 					}
 					int gc = atoi(fields[0].c_str());
 					double mean = atof(fields[1].c_str());
-					double stdev = atof(fields[2].c_str());
-					gcFactors[gc] = mean;
-					gcStds[gc] = stdev;
+					gcMeans[gc] = mean;
 				}
 				else {
-					cerr << "Error: malformed model file " << modelFile << endl;
+					cerr << "Error: malformed model file " << proFile << endl;
 					exit(1);
 				}
+			}
+			paraLoadedCount++;
+		}
+		else if(line.compare("[Log Ratio Standard Deviation]") == 0) {
+			if(getNextLine(ifs, line, lineNum)) {
+				if(line.empty()) {
+					cerr << errMsg << lineNum << "\n" << line << endl;
+					exit(1);
+				}
+				gcStd = atof(trim(line).c_str());
+			}
+			else {
+				cerr << "Error: malformed model file " << proFile << endl;
+				exit(1);
 			}
 			paraLoadedCount++;
 		}
@@ -1046,10 +1006,11 @@ void Profile::load(string modelFile) {
 	ifs.close();
 	
 	if(paraLoadedCount < 6) {
-		cerr << "Error: corrupted model file " << modelFile <<
+		cerr << "Error: corrupted model file " << proFile <<
 				", failed to load some parameters!" << endl;
 		exit(1);
 	}
+	cerr << "profile was loaded from file " << proFile << endl;
 }
 
 void Profile::saveResults(string bamFile, string outFile) {
@@ -1067,263 +1028,161 @@ void Profile::saveResults(string bamFile, string outFile) {
 		ost = &(std::cout);
 	}
 	
+	string bases = config.getStringPara("bases");
+	int N = bases.length();
+	int kmer = config.getIntPara("kmer");
+	int binCount = config.getIntPara("bins");
+	
 	time_t timel;  
 	time(&timel);     
 	(*ost) << "#model created at " << asctime(gmtime(&timel));
 	(*ost) << "#reads: " << bamFile << endl << endl;
-	(*ost) << "estimated sequencing coverage: " << estimatedCoverage << endl;
-	(*ost) << "nucleotides: " << nucleotides << endl;
-	(*ost) << "binCount: " << binCount << endl << endl;
+	(*ost) << "bases: " << bases << endl;
+	(*ost) << "binCount: " << binCount << endl;
+	(*ost) << "kmer: " << kmer << endl << endl;
 	
 	int i, j, k, l;
-	double **p;
-
-	(*ost) << "[Initial Substitution Probs]" << endl;
-	p = initSubstitutionProbs1.getEntrance();
-	for(i = 0; i < nucleotides.length(); i++) {
-		for(j = 0; j < nucleotides.length(); j++) {
-			if(j < nucleotides.length()-1) {
-				(*ost) << p[i][j] << '\t';
+	double *p;
+	
+	(*ost) << "\n[Kmer Distribution]" << endl;
+	p = kmersDist.getEntrance();
+	for(j = 0; j < binCount; j++) {
+		for(k = 0; k < kmerCount; k++)  {
+			if(k < kmerCount-1) {
+				(*ost) << p[j*kmerCount+k] << '\t';
 			}
 			else {
-				(*ost) << p[i][j] << endl;
-			}
-		}
-	}
-	p = initSubstitutionProbs2.getEntrance();
-	for(i = 0; i < nucleotides.length(); i++) {
-		for(j = 0; j < nucleotides.length(); j++) {
-			if(j < nucleotides.length()-1) {
-				(*ost) << p[i][j] << '\t';
-			}
-			else {
-				(*ost) << p[i][j] << endl;
+				(*ost) << p[j*kmerCount+k] << endl;
 			}
 		}
 	}
 	
-	(*ost) << "\n[Conditional Substitution Probs]" << endl;
-	for(i = 0; i < nucleotides.length(); i++) {
-		(*ost) << "Nucleotide: " << nucleotides[i] << endl;
+	(*ost) << "\n[Substitution Probs]" << endl;
+	for(i = 0; i < kmerCount; i++) {
+		(*ost) << "kmer: " << kmers[i] << endl;
+		p = subsDist1[i].getEntrance();
 		for(j = 0; j < binCount; j++) {
-			p = conditionalSubstitutionProbs1[i][j].getEntrance();
-			(*ost) << "binIndx: " << j << endl;
-			for(k = 0; k < nucleotides.length(); k++) {
-				for(l = 0; l < nucleotides.length(); l++) {
-					if(l < nucleotides.length()-1) {
-						(*ost) << p[k][l] << '\t';
-					}
-					else {
-						(*ost) << p[k][l] << endl;
-					}
+			for(k = 0; k < N; k++)  {
+				if(k < N-1) {
+					(*ost) << p[j*N+k] << '\t';
+				}
+				else {
+					(*ost) << p[j*N+k] << endl;
 				}
 			}
-			p = conditionalSubstitutionProbs2[i][j].getEntrance();
-			for(k = 0; k < nucleotides.length(); k++) {
-				for(l = 0; l < nucleotides.length(); l++) {
-					if(l < nucleotides.length()-1) {
-						(*ost) << p[k][l] << '\t';
-					}
-					else {
-						(*ost) << p[k][l] << endl;
-					}
+		}
+		p = subsDist2[i].getEntrance();
+		for(j = 0; j < binCount; j++) {
+			for(k = 0; k < N; k++)  {
+				if(k < N-1) {
+					(*ost) << p[j*N+k] << '\t';
+				}
+				else {
+					(*ost) << p[j*N+k] << endl;
 				}
 			}
-		}	
+		}
 	}
 	
 	(*ost) << "\n[Base Quality Distribution]" << endl;
-	p = baseQualityDist.getEntrance();
-	k = baseQualityDist.getCOLS();
-	for(i = 0; i < nucleotides.length(); i++) {
-		for(j = 0; j < k; j++) {
-			if(j < k-1) {
-				(*ost) << p[i][j] << '\t';
-			}
-			else {
-				(*ost) << p[i][j] << endl;
-			}
-		}
-	}
-	
-	(*ost) << "\n[Error Base Quality Distribution]" << endl;
-	p = errorBaseQualityDist.getEntrance();
-	k = errorBaseQualityDist.getCOLS();
-	for(i = 0; i < nucleotides.length(); i++) {
-		for(j = 0; j < k; j++) {
-			if(j < k-1) {
-				(*ost) << p[i][j] << '\t';
-			}
-			else {
-				(*ost) << p[i][j] << endl;
+	int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
+	for(i = 0; i < N*N; i++) {
+		(*ost) << "basePairIndx: " << i << endl;
+		p = qualityDist[i].getEntrance();
+		for(j = 0; j < binCount; j++) {
+			for(k = 0; k < baseQualtiyCount; k++)  {
+				if(k < baseQualtiyCount-1) {
+					(*ost) << p[j*baseQualtiyCount+k] << '\t';
+				}
+				else {
+					(*ost) << p[j*baseQualtiyCount+k] << endl;
+				}
 			}
 		}
 	}
 	
 	(*ost) << "\n[Insert Size Standard Deviation]" << endl;
-	(*ost) << stdInsertSize << endl;
+	(*ost) << stdISize << endl;
 	
-	(*ost) << "\n[GC-content Factors]" << endl;
+	(*ost) << "\n[Log Ratio Mean Value]" << endl;
 	for(i = 0; i < 101; i++) {
-		(*ost) << i << '\t' << gcFactors[i] << '\t' << gcStds[i] << endl;
+		(*ost) << i << '\t' << gcMeans[i] << endl;
 	}
+	(*ost) << "\n[Log Ratio Standard Deviation]" << endl;
+	(*ost) << gcStd << endl;
 	
 	if(!outFile.empty()) {
 		ofs.close();
 	}
 }
 
-void Profile::initSamplingPool() {	
-	unsigned int i, j, k, l, iters = 10000;
-
-	double zero_final = 1e-8;
+void Profile::initCDFs() {	
+	unsigned int i, j, l;
 	
-	//baseQuality sampling
-	Matrix<double> baseQualityCdf = baseQualityDist.cumsum();
-	for(j = 0; j < nucleotides.length(); j++) {
-		Matrix<int> tmp = randIndx(1, baseQualityIndxs.getCOLS(), baseQualityCdf.Row(j), true);
-		baseQualityIndxs.setRow(j, tmp);
-	}
-	baseQualityDist.clear();
-	baseQualityCdf.clear();
+	string bases = config.getStringPara("bases");
+	int N = bases.length();
+	int binCount = config.getIntPara("bins");
 	
-	//errorBaseQuality sampling
-	Matrix<double> errorBaseQualityCdf = errorBaseQualityDist.cumsum();
-	for(j = 0; j < nucleotides.length(); j++) {
-		Matrix<int> tmp = randIndx(1, errorBaseQualityIndxs.getCOLS(), errorBaseQualityCdf.Row(j), true);
-		errorBaseQualityIndxs.setRow(j, tmp);
-	}
-	errorBaseQualityDist.clear();
-	errorBaseQualityCdf.clear();
-	
-	//insertSize sampling
-	if(config.isPairedEnd() && stdInsertSize > 0) {
-		Matrix<double> insertSizeCdf = insertSizeDist.cumsum();
-		Matrix<int> tmp = randIndx(1, insertSizeIndxs.getCOLS(), insertSizeCdf, true);
-		insertSizeIndxs.setRow(0, tmp);
-		insertSizeCdf.clear();
-		insertSizeDist.clear();
-	}
-	
-	//gc sampling
-	int coverage = config.getIntPara("coverage");
-	//gcAlphabets = new Matrix<int>[101];
-	for(i = 0; i < 101; i++) {
+	//baseQuality
+	int quality_th = 20;
+	int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
+	for(i = 0; i < N*N; i++) {
+		//qualityDist[i].normalize(0);
 		/*
-		if(estimatedCoverage > 0) {
-			gcFactors[i] *= (double) coverage/estimatedCoverage;
-			gcStds[i] *= pow((double) coverage/estimatedCoverage, 2);
-		}
-		*/
-
-		/*
-		double intervalLen = 1.96 * 2 * gcStds[i];
-		int minValue = floor(max(gcFactors[i] - intervalLen/2, 0.0));
-		int maxValue = minValue+intervalLen;
-		//cerr << "gc=" << i << ", std=" << gcStds[i] << ", minValue=" << minValue << ", maxValue=" << maxValue << ", meanValue=" << gcFactors[i] << endl;
-		gcAlphabets[i].resize(1, maxValue-minValue+1, false);
-		for(j = 0; j < gcAlphabets[i].getCOLS(); j++) {
-			gcAlphabets[i].set(0, j, minValue++);
-		}
-		gcDist[i].resize(1, gcAlphabets[i].getCOLS(), false);
-		if(gcAlphabets[i].getCOLS() == 1) {
-			gcIndxs[i].resize(1, 1, false);
-			gcDist[i].set(0, 0 ,1);
+		if(i%(N+1) == 0) {
+			for(j = 0; j < quality_th; j++) {
+				qualityDist[i].setCol(j, 0.0);
+			}
 		}
 		else {
-			gcIndxs[i].resize(1, randomCount*gcAlphabets[i].getCOLS(), false);
-			for(j = 0; j < gcAlphabets[i].getCOLS(); j++) {
-				double pdf = normpdf(gcAlphabets[i].get(0, j), gcFactors[i], gcStds[i]);
-				gcDist[i].set(0, j, pdf);
+			for(j = quality_th; j < baseQualtiyCount; j++) {
+				qualityDist[i].setCol(j, 0.0);
 			}
-			gcDist[i].normalize(0);
 		}
 		*/
+		qualityDist[i].normalize(0);
+		qualityCdf[i] = qualityDist[i].cumsum();
+		qualityDist[i].clear();
 	}
-	/*
-	for(k = 0; k < 101; k++) {
-		Matrix<double> gcCdf = gcDist[k].cumsum();
-		Matrix<int> tmp = randIndx(1, gcIndxs[k].getCOLS(), gcCdf, true);
-		gcIndxs[k].setRow(0, tmp);
-		gcCdf.clear();
+	
+	//insertSize
+	if(config.isPairedEnd() && stdISize > 0) {
+		iSizeCdf = iSizeDist.cumsum();
+		iSizeDist.clear();
 	}
-	*/
-	for(k = 0; k < 101; k++) {
+	
+	//gc
+	for(l = 0; l < 101; l++) {
 		unsigned seed = chrono::system_clock::now().time_since_epoch().count();
 		default_random_engine generator(seed);
-		normal_distribution<double> normal(gcFactors[k], gcStds[k]);
-	 	j = max(1.0, sqrt(gcStds[k]));
-		gcValues[k].resize(1, j*randomCount, false);
-		for(i = 0; i < j*randomCount; i++) {
-			double v = normal(generator);
-			while(v < 0) {
-				v = normal(generator);
-			}
-			gcValues[k].set(0, i, v);
-		}
+		normal_distribution<double> normal(gcMeans[l], gcStd);
+		gc_generators.push_back(generator);
+		gc_normDists.push_back(normal);
 	}
 
-	//cs and is sampling
-	int N = nucleotides.length();
-	Matrix<double> isc1 = initSubstitutionProbs1.cumsum();
-	Matrix<double> isc2 = initSubstitutionProbs2.cumsum();
-	for(i = 0; i < N; i++) {
-		for(j = 0; j < binCount; j++) {
-			Matrix<double> csc = conditionalSubstitutionProbs1[i][j].cumsum();
-			for(k = 0; k < N; k++) {
-				Matrix<int> tmp = randIndx(1, conditionalSubstitutionIndxs1[i][j].getCOLS(), csc.Row(k), true);
-				conditionalSubstitutionIndxs1[i][j].setRow(k, tmp);
-			}
-			if(config.isPairedEnd()) {
-				if(stdInsertSize > 0) {
-					csc = conditionalSubstitutionProbs2[i][j].cumsum();
-					for(k = 0; k < N; k++) {
-						Matrix<int> tmp = randIndx(1, conditionalSubstitutionIndxs2[i][j].getCOLS(), csc.Row(k), true);
-						conditionalSubstitutionIndxs2[i][j].setRow(k, tmp);
-					}
-				}
-				else {
-					conditionalSubstitutionIndxs2[i][j].clear();
-				}
-				
-			}
-			else {
-				conditionalSubstitutionIndxs2[i][j].clear();
-			}
-			conditionalSubstitutionProbs1[i][j].clear();
-			conditionalSubstitutionProbs2[i][j].clear();
-			csc.clear();
-		}
-		delete[] conditionalSubstitutionProbs1[i];
-		delete[] conditionalSubstitutionProbs2[i];
-		
-		Matrix<int> tmp = randIndx(1, initSubstitutionIndxs1.getCOLS(), isc1.Row(i), true);
-		initSubstitutionIndxs1.setRow(i, tmp);
+	//subs
+	for(i = 0; i < kmerCount; i++) {
+		subsCdf1[i] = subsDist1[i].cumsum();
 		if(config.isPairedEnd()) {
-			if(stdInsertSize > 0) {
-				tmp = randIndx(1, initSubstitutionIndxs2.getCOLS(), isc2.Row(i), true);
-				initSubstitutionIndxs2.setRow(i, tmp);
+			if(stdISize > 0) {
+				subsCdf2[i] = subsDist2[i].cumsum();
 			}
 			else {
-				initSubstitutionIndxs2.clear();
+				subsCdf2[i].clear();
 			}
 		}
+		else {
+			subsCdf2[i].clear();
+		}
+		subsDist1[i].clear();
+		subsDist2[i].clear();
 	}
-	isc1.clear();
-	isc2.clear();
-	delete[] conditionalSubstitutionProbs1;
-	delete[] conditionalSubstitutionProbs2;
-	conditionalSubstitutionProbs1 = NULL;
-	conditionalSubstitutionProbs2 = NULL;
-	initSubstitutionProbs1.clear();
-	initSubstitutionProbs2.clear();
 }
 
-void Profile::train(string modelFile) {
-	load(modelFile);
-	cerr << "profile was loaded from file " << modelFile << endl;
-	initParas(true);
-	initSamplingPool();
+void Profile::train(string proFile) {
+	load(proFile);
+	normParas(true);
+	initCDFs();
 }
 
 void Profile::train(string bamFile, string samtools, string outFile) {
@@ -1353,113 +1212,224 @@ void Profile::train(string bamFile, string samtools, string outFile) {
 	}
 	fclose(fp);
 
-	int wgs = (genome.getInTargets().empty())? 1:0;
-	long minReadsRequired = 1000000;
-	if((wgs == 1 && count < minReadsRequired) || (wgs == 0 && count < 2*minReadsRequired)) {
+	int wxs = (genome.getInTargets().empty())? 0:1;
+	long minReadsRequired = 2000000;
+	if((wxs == 0 && count < minReadsRequired) || (wxs == 1 && count < 2*minReadsRequired)) {
 		cerr << "\nWarning: no enough reads to evaluate GC-content effects!" << endl;		
-		initGCFactors();
+		initGCParas();
 	}
 	else {	
-		estimateCoverage();
-		evaluateGC();
+		estimateGCParas(outFile);
 	}
-	initParas(false);
+	normParas(false);
 	saveResults(bamFile, outFile);
 }
 
 int Profile::yieldInsertSize() {
-	if(insertSizeAlphabet.getEntrance() == NULL) {
+	if(iSizeAlphabet.getEntrance() == NULL) {
 		return config.getIntPara("insertSize");
 	}
-	int i = threadPool->randomInteger(0, insertSizeIndxs.getCOLS());
-	i = insertSizeIndxs.get(0, i);
-	return insertSizeAlphabet.get(0, i);
+	
+	int k = randIndx(iSizeCdf.getEntrance(), iSizeAlphabet.getCOLS());
+	return iSizeAlphabet.get(0, k);
 }
 
-double Profile::getStdInsertSize() {
-	return stdInsertSize;
+double Profile::getStdISize() {
+	return stdISize;
 }
 
 int Profile::getMaxInsertSize() {
-	if(insertSizeAlphabet.getEntrance() == NULL) {
+	if(iSizeAlphabet.getEntrance() == NULL) {
 		return config.getIntPara("insertSize");
 	}
-	int k = insertSizeAlphabet.getCOLS();
-	return insertSizeAlphabet.get(0, k-1);
+	int k = iSizeAlphabet.getCOLS();
+	return iSizeAlphabet.get(0, k-1);
 }
 
 double Profile::getGCFactor(int gc) {
 	if(gc < 0 || gc > 100) {
 		return 0;
 	}
+	
+	double v = gc_normDists[gc](gc_generators[gc]);
+	while(v < 0) {
+		v = gc_normDists[gc](gc_generators[gc]);
+	}
+	return v;
+}
+
+int Profile::getSubBaseIndx1(char *kmerSeq, int binIndx) {
+	static int N = config.getStringPara("bases").length();
+	static int kmer = config.getIntPara("kmer");
+	int kmerIndx = getKmerIndx(kmerSeq);
+	if(kmerIndx == -1) {
+		return getIndexOfBase(kmerSeq[kmer-1]);
+	}
+	int k = randIndx(subsCdf1[kmerIndx].getEntrance()+binIndx*N, N);
+	return k;
+}
+
+int Profile::getSubBaseIndx2(char *kmerSeq, int binIndx) {
+	static int N = config.getStringPara("bases").length();
+	static int kmer = config.getIntPara("kmer");
+	int k;
+	int kmerIndx = getKmerIndx(kmerSeq);
+	if(kmerIndx == -1) {
+		return getIndexOfBase(kmerSeq[kmer-1]);
+	}
+	if(subsCdf2[kmerIndx].getEntrance() == NULL) {
+		int k = randIndx(subsCdf1[kmerIndx].getEntrance()+binIndx*N, N);
+		return k;
+	}
+	else {
+		int k = randIndx(subsCdf2[kmerIndx].getEntrance()+binIndx*N, N);
+		return k;
+	}
+}
+
+int Profile::getIndelSeq(vector<int> &baseIndxs) {
+	static int N = config.getStringPara("bases").length();
+	baseIndxs.clear();
+	double p = threadPool->randomDouble(0, 1);
+	if(p <= indelRate) {
+		int i, k;
+		int n = threadPool->randomInteger(1, 51);
+		if(threadPool->randomDouble(0, 1) > 0.5) {
+			for(i = 0; i < n; i++) {
+				k = threadPool->randomInteger(0, N-1);
+				baseIndxs.push_back(k);
+			}
+		}
+		return n;
+	}
+	return 0;
+}
+
+int Profile::getBaseQuality(int basePairIndx, int binIndx) {
+	static int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
+	int i = randIndx(qualityCdf[basePairIndx].getEntrance()+binIndx*baseQualtiyCount, baseQualtiyCount);
+	return qualityAlphabet.get(0, i);
+}
+
+int Profile::getRandBaseQuality() {
+	return threadPool->randomInteger(minBaseQuality, minBaseQuality+20);
+}
+
+char* Profile::predict(char* refSeq, int isRead1) {
+	if(refSeq == NULL || refSeq[0] == '\0') {
+		return NULL;
+	}
+	
+	int i, j, k;
+	
+	static string bases = config.getStringPara("bases");
+	static int kmer = config.getIntPara("kmer");
+	static int binCount = config.getIntPara("bins");
+	static int N = bases.length();
+	int n = strlen(refSeq);
+	
 	/*
-	double weight = 0;
-	for(int i = 0; i < gcDist[gc].getCOLS(); i++) {
-		weight += gcDist[gc].get(0, i)*gcAlphabets[gc].get(0, i);
-	}
-	return weight;
+	for(i = 0; i < n && refSeq[i] == 'N'; i++);
+	for(j = i; j < n && refSeq[j] != 'N'; j++);
+	
+	refSeq = &refSeq[i];
+	n = j-i;
 	*/
-	int i = threadPool->randomInteger(0, gcValues[gc].getCOLS());
-	return gcValues[gc].get(0, i);
-}
-
-int Profile::getReplicates(int gc) {
-	if(gc < 0 || gc > 100) {
-		return 0;
+	
+	map<int, vector<int> > indelBaseIndxs;
+	vector<int> indelLens;
+	int indelLength = 0;
+	for(j = 0; j < n;) {
+		k = getIndelSeq(indelBaseIndxs[j]);
+		if(indelBaseIndxs[j].empty() && k > 0) {
+			k = min(n-j, k);
+			indelLength -= k;
+			indelLens.push_back(k);
+			for(i = 1; i < k; i++) {
+				indelLens.push_back(0);
+			}
+			j += k;
+		}
+		else {
+			indelLength += k;
+			j++;
+			indelLens.push_back(k);
+		}
 	}
-	int i = threadPool->randomInteger(0, gcIndxs[gc].getCOLS());
-	i = gcIndxs[gc].get(0, i);
-	return gcAlphabets[gc].get(0, i);
-}
-
-int Profile::getInitBaseIndx1(int base) {
-	int j = base;
-	int i = threadPool->randomInteger(0, initSubstitutionIndxs1.getCOLS());
-	return initSubstitutionIndxs1.get(j, i);
-}
-
-int Profile::getInitBaseIndx2(int base) {
-	int i, j = base;
-	if(initSubstitutionIndxs2.getEntrance() == NULL) {
-		i = threadPool->randomInteger(0, initSubstitutionIndxs1.getCOLS());
-		return initSubstitutionIndxs1.get(j, i);
+	if(n+indelLength < 50) {
+		indelLength = 0;
+		indelBaseIndxs.clear();
+		indelLens.clear();
+		for(j = 0; j < n; j++) {
+			indelLens.push_back(0);
+		}
 	}
-	else {
-		i = threadPool->randomInteger(0, initSubstitutionIndxs2.getCOLS());
-		return initSubstitutionIndxs2.get(j, i);
+	
+	char sourceSeq[n+indelLength+1];
+	int m = 0;
+	for(j = 0; j < n;) {
+		if(indelBaseIndxs[j].empty() && indelLens[j] > 0) {	//del
+			j += indelLens[j];
+			continue;
+		}
+		else if(indelLens[j] == 0) {
+			sourceSeq[m++] = refSeq[j];
+			j++;
+		}
+		else {	//insert
+			sourceSeq[m++] = refSeq[j];
+			vector<int> &indxs = indelBaseIndxs[j];
+			k = indxs.size();
+			for(i = 0; i < k; i++) {
+				sourceSeq[m++] = bases[indxs[i]];
+			}
+			j++;
+		}
 	}
-}
-
-int Profile::getCondBaseIndx1(int preBase, int base, int binIndx) {
-	int i = preBase, j = base;
-	int k = threadPool->randomInteger(0, conditionalSubstitutionIndxs1[j][binIndx].getCOLS());
-	return conditionalSubstitutionIndxs1[j][binIndx].get(i, k);
-}
-
-int Profile::getCondBaseIndx2(int preBase, int base, int binIndx) {
-	int i = preBase, j = base, k;
-	if(conditionalSubstitutionIndxs2[j][binIndx].getEntrance() == NULL) {
-		k = threadPool->randomInteger(0, conditionalSubstitutionIndxs1[j][binIndx].getCOLS());
-		return conditionalSubstitutionIndxs1[j][binIndx].get(i, k);
+	sourceSeq[n+indelLength] = '\0';
+	n += indelLength;
+	
+	char seq[kmer+n];
+	for(i = 0; i < kmer-1; i++) {
+		seq[i] = 'X';
 	}
-	else {
-		k = threadPool->randomInteger(0, conditionalSubstitutionIndxs2[j][binIndx].getCOLS());
-		return conditionalSubstitutionIndxs2[j][binIndx].get(i, k);
+	for(; i < kmer+n-1; i++) {
+		seq[i] = sourceSeq[i-kmer+1];
 	}
-}
-
-int Profile::getBaseQuality(int base) {
-	int j = base;
-	int i = threadPool->randomInteger(0, baseQualityIndxs.getCOLS());
-	i = baseQualityIndxs.get(j, i);
-	return qualityAlphabet.get(0, i);
-}
-
-int Profile::getErrorBaseQuality(int base) {
-	int j = base;
-	int i = threadPool->randomInteger(0, errorBaseQualityIndxs.getCOLS());
-	i = errorBaseQualityIndxs.get(j, i);
-	return qualityAlphabet.get(0, i);
+	
+	int refIndx, basePairIndx, binIndx;
+	char *results = new char[2*n+1];
+	for(j = 0; j < n; j++) {
+		refIndx = getIndexOfBase(sourceSeq[j]);
+		binIndx = j*binCount/n;
+		
+		char c = seq[j+kmer];
+		seq[j+kmer] = '\0';
+		if(isRead1) {
+			k = getSubBaseIndx1(&seq[j], binIndx);
+		}
+		else {
+			k = getSubBaseIndx2(&seq[j], binIndx);
+		}
+		seq[j+kmer] = c;
+		if(k == -1) {
+			results[j] = 'N';
+		}
+		else {
+			results[j] = bases[k];
+		}
+		
+		if(k == -1) {
+			results[j+n] = getRandBaseQuality();
+		}
+		else {
+			basePairIndx = refIndx*N+k;
+			results[j+n] = getBaseQuality(basePairIndx, binIndx);
+		}
+		
+	}
+	results[2*n] = '\0';
+	return results;
 }
 
 void Profile::predict(char* refSeq, char* results, int num, int isRead1) {
@@ -1468,61 +1438,64 @@ void Profile::predict(char* refSeq, char* results, int num, int isRead1) {
 		return;
 	}
 	
-	int n = strlen(refSeq);
-	int nucleIndxs[n];
-	char readSeq[n];
-	char baseQuality[n];
-	
-	//int iters = 100;
-	int iters = 0;
 	int i, j, k, quality;
-	int preIndx, indx, indx1, binIndx;
+	
+	static string bases = config.getStringPara("bases");
+	static int kmer = config.getIntPara("kmer");
+	static int binCount = config.getIntPara("bins");
+	static int N = bases.length();
+	int n = strlen(refSeq);
+	
+	int refIndxs[n];
+	char readSeq[n];
+	char qualitySeq[n];
+	
+	char seq[kmer+n];
+	for(i = 0; i < kmer-1; i++) {
+		seq[i] = 'X';
+	}
+	for(; i < kmer+n-1; i++) {
+		seq[i] = refSeq[i-kmer+1];
+	}
 	
 	for(i = 0; i < n; i++) {
-		nucleIndxs[i] = getIndexOfNucleotide(refSeq[i]);
+		refIndxs[i] = getIndexOfBase(refSeq[i]);
 	}
+	
+	int basePairIndx, binIndx;
 	
 	int m = 0;
 	for(i = 0; i < num; i++) {
 		for(j = 0; j < n; j++) {
-			indx = getIndexOfNucleotide(refSeq[j]);
-			//indx = nucleIndxs[j];
-			//k = indx;
-			if(j == 0) {
-				if(isRead1) {
-					k = getInitBaseIndx1(indx);
-				}
-				else {
-					k = getInitBaseIndx2(indx);
-				}
-				nucleIndxs[0] = k;
-				readSeq[0] = nucleotides[k];
+			binIndx = j*binCount/n;
+			
+			char c = seq[j+kmer];
+			seq[j+kmer] = '\0';
+			if(isRead1) {
+				k = getSubBaseIndx1(&seq[j], binIndx);
 			}
 			else {
-				binIndx = j*binCount/n;
-				preIndx = getIndexOfNucleotide(refSeq[j-1]);
-				if(isRead1) {
-					//k = getCondBaseIndx1(nucleIndxs[j-1], indx, binIndx);
-					k = getCondBaseIndx1(preIndx, indx, binIndx);
-				}
-				else {
-					//k = getCondBaseIndx2(nucleIndxs[j-1], indx, binIndx);
-					k = getCondBaseIndx2(preIndx, indx, binIndx);
-				}
-				nucleIndxs[j] = k;
-				readSeq[j] = nucleotides[k];
+				k = getSubBaseIndx2(&seq[j], binIndx);
+			}
+			seq[j+kmer] = c;
+			if(k == -1) {
+				readSeq[j] = 'N';
+			}
+			else {
+				readSeq[j] = bases[k];
 			}
 			
-			if(indx == k) {
-				quality = getBaseQuality(k);
+			if(k == -1) {
+				qualitySeq[j] = minBaseQuality;
 			}
 			else {
-				quality = getErrorBaseQuality(k);
+				basePairIndx = refIndxs[j]*N+k;
+				qualitySeq[j] = getBaseQuality(basePairIndx, binIndx);
 			}
-			baseQuality[j] = quality;
+			
 		}
 		strncpy(&results[m], readSeq, n);
-		strncpy(&results[m+n], baseQuality, n);
+		strncpy(&results[m+n], qualitySeq, n);
 		m += 2*n;
 	}
 	results[m] = '\0';

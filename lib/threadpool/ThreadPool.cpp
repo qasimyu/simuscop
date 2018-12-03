@@ -82,7 +82,7 @@ void ThreadPool::pool_destroy() {
 	
 }
 
-void ThreadPool::pool_add_work(void *(*process) (void *arg), void *arg, int wid) {					
+void ThreadPool::pool_add_work(void *(*process) (const void *arg), const void *arg, int wid) {					
 	Work *newwork = new Work(process, arg, wid);
 	
 	work_queue *p = (work_queue*) malloc(sizeof(work_queue));

@@ -14,7 +14,7 @@
 Config::Config() {
 	configFile = "";
 	string strParaNames[] = {"profile", "ref", "variation", "snp", "target",
-				 "outputDir", "abundance", "layout"};
+							"bases", "outputDir", "abundance", "layout"};
 	
 	/*---start default configuration---*/
 	
@@ -23,16 +23,23 @@ Config::Config() {
 		if(strParaNames[i].compare("layout") == 0) {
 			stringParas.insert(make_pair(strParaNames[i], "SE"));
 		}
+		else if(strParaNames[i].compare("bases") == 0) {
+			stringParas.insert(make_pair(strParaNames[i], "ACTG"));
+		}
 		else {
 			stringParas.insert(make_pair(strParaNames[i], ""));
 		}
 	}
+	intParas.insert(make_pair("kmer", 0));
+	intParas.insert(make_pair("bins", 0));
 	intParas.insert(make_pair("threads", 1));
 	intParas.insert(make_pair("verbose", 1));
 	intParas.insert(make_pair("readLength", 0));
 	intParas.insert(make_pair("coverage", 0));
 	intParas.insert(make_pair("ploidy", 2));
 	intParas.insert(make_pair("insertSize", 350));
+	
+	realParas.insert(make_pair("indelRate", 0.00025));
 	/*---end default configuration---*/
 }
 
@@ -70,6 +77,9 @@ void Config::loadConfig() {
 		}
 		else if(intParas.find(key) != intParas.end()) {
 			intParas[key] = atoi(value.c_str());
+		}
+		else if(realParas.find(key) != realParas.end()) {
+			realParas[key] = atof(value.c_str());
 		}
 		else if(key.compare("name") == 0) {
 			popuNames = split(value, ',');
@@ -149,6 +159,12 @@ void Config::checkParas() {
 		cerr << "Error: insert size should be not smaller than read length!" << endl;
 		exit(1);
 	}
+	
+	if(realParas["indelRate"] < 0 || realParas["indelRate"] > 0.001) {
+		cerr << "Error: indel error rate should be a value between 0 to 0.001!" << endl;
+		exit(1);
+	}
+	
 	string tmp = stringParas["outputDir"];
 	if(tmp[tmp.length()-1] == '/') {
 		tmp.erase(tmp.end()-1);
@@ -167,6 +183,15 @@ string Config::getStringPara(string paraName) {
 	return "";
 }
 
+void Config::setStringPara(string paraName, string value) {
+	if(stringParas.find(paraName) != stringParas.end()) {
+		stringParas[paraName] = value;
+	}
+	else {
+		cerr << "Warning: unrecognized parameter name \"" << paraName << "\"" << endl;
+	}
+}
+
 int Config::getIntPara(string paraName) {
 	if(intParas.find(paraName) != intParas.end()) {
 		return intParas[paraName];
@@ -177,3 +202,30 @@ int Config::getIntPara(string paraName) {
 	}
 }
 
+void Config::setIntPara(string paraName, int value) {
+	if(intParas.find(paraName) != intParas.end()) {
+		intParas[paraName] = value;
+	}
+	else {
+		cerr << "Warning: unrecognized parameter name \"" << paraName << "\"" << endl;
+	}
+}
+
+double Config::getRealPara(string paraName) {
+	if(realParas.find(paraName) != realParas.end()) {
+		return realParas[paraName];
+	}
+	else {
+		cerr << "Error: unrecognized parameter name \"" << paraName << "\"" << endl;
+		exit(1);
+	}
+}
+
+void Config::setRealPara(string paraName, double value) {
+	if(realParas.find(paraName) != realParas.end()) {
+		realParas[paraName] = value;
+	}
+	else {
+		cerr << "Warning: unrecognized parameter name \"" << paraName << "\"" << endl;
+	}
+}

@@ -21,7 +21,7 @@ abundance = ./testData/abundance_tumor.txt
 ## [required] output directory
 outputDir = ./results
 
-## [optional] sequence layout, should be "SE" or "PE" (default: "SE")
+## [optional] sequence layout, should be "SE" for single end or "PE" for paired-end (default: "SE")
 layout = SE
 
 ## [optional] the number of threads to use (default: 1)
@@ -36,9 +36,6 @@ readLength = 150
 ## [required] sequencing coverage
 coverage = 10
 
-## [optional] genome ploidy to simulate (default: 2)
-ploidy = 2
-
 ## [optional] insert size for paired end sequencing (default: 350, only effective when the "layout" is set to "PE")
-insertSize = 250
+insertSize = 200
 

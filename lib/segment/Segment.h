@@ -90,7 +90,7 @@ class Segment {
 		double getWeightedLength();
 		
 		void generateSegSequences();
-		static void* yieldReads(void* args);
+		static void* yieldReads(const void* args);
 		
 };
 

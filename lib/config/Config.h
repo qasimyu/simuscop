@@ -19,6 +19,7 @@ class Config {
 		
 		map<string, string> stringParas;
 		map<string, int> intParas;
+		map<string, double> realParas;
 		vector<string> popuNames;
 	public:
 		Config();
@@ -37,7 +38,12 @@ class Config {
 		void checkParas();
 		
 		string getStringPara(string paraName);
+		void setStringPara(string paraName, string value);
 		int getIntPara(string paraName);
+		void setIntPara(string paraName, int value);
+		double getRealPara(string paraName);
+		void setRealPara(string paraName, double value);
+		
 		vector<string>& getPopuNames() {return popuNames;}
 		
 };

@@ -71,8 +71,8 @@ class Thread {
 
 class Work {
 	private:
-		void* (*process) (void* arg);
-		void* arg;
+		void* (*process) (const void* arg);
+		const void* arg;
 		int wid;
 		pthread_t tid;
 		
@@ -87,7 +87,7 @@ class Work {
 		struct timeval tv_started;
 		struct timeval tv_finished;
 	public:
-		Work(void* (*process) (void* arg), void* arg, int wid) : process(process), arg(arg), wid(wid) {
+		Work(void* (*process) (const void* arg), const void* arg, int wid) : process(process), arg(arg), wid(wid) {
 			state = READY;
 			//tid = 0;
 			memset(&tv_started, 0, sizeof(tv_started));
@@ -180,6 +180,8 @@ class ThreadPool {
 			max_thread_num = threads;
 		}
 		
+		int getThreadNumber() {return max_thread_num;}
+		
 		~ThreadPool();
 		
 		int worksFinished() {return finishedWorks;}
@@ -190,7 +192,7 @@ class ThreadPool {
 		
 		void clearWorks();
 		
-		void pool_add_work(void *(*process) (void *arg), void *arg, int wid);
+		void pool_add_work(void *(*process) (const void *arg), const void *arg, int wid);
 		
 		void wait();
 		

@@ -15,89 +15,88 @@
 
 using namespace std;
 
+class KmerIndex {
+	public:
+		int index;
+		map<char, KmerIndex> nextIndexs;
+		KmerIndex() {index = -1;}
+};
+
 class Profile {
 	private:
-		int meanReadLength;
-		int estimatedCoverage;
-		
-		int binCount;
-		int randomCount;
-		Matrix<int> baseAlphabet;
-		Matrix<int> qualityAlphabet;
-		Matrix<int> insertSizeAlphabet;
-		Matrix<int>* gcAlphabets;
-
 		int minBaseQuality;
 		int maxBaseQuality;
 		
-		double stdInsertSize;
+		double indelRate;
 		
-		string nucleotides;
+		char **kmers;
+		KmerIndex rIndex;
+		int kmerCount;
 		
-		Matrix<double>** conditionalSubstitutionProbs1;
-		Matrix<double>** conditionalSubstitutionProbs2;
-		Matrix<double> initSubstitutionProbs1;
-		Matrix<double> initSubstitutionProbs2;
-		Matrix<double> baseQualityDist;
-		Matrix<double> errorBaseQualityDist;
-		Matrix<double> insertSizeDist;
-		Matrix<double>* gcDist;
+		double stdISize;
 		
-		Matrix<int>** conditionalSubstitutionIndxs1;
-		Matrix<int>** conditionalSubstitutionIndxs2;
-		Matrix<int> initSubstitutionIndxs1;
-		Matrix<int> initSubstitutionIndxs2;
-		Matrix<int> baseQualityIndxs;
-		Matrix<int> errorBaseQualityIndxs;
-		Matrix<int> insertSizeIndxs;
-		Matrix<int>* gcIndxs;
+		Matrix<int> baseAlphabet;
+		Matrix<int> qualityAlphabet;
+		Matrix<int> iSizeAlphabet;
+		
+		Matrix<double> kmersDist;
+		
+		Matrix<double> *subsDist1;
+		Matrix<double> *subsDist2;
+		Matrix<double> *subsCdf1;
+		Matrix<double> *subsCdf2;
+		
+		Matrix<double> *qualityDist;
+		Matrix<double> *qualityCdf;
+		
+		Matrix<double> iSizeDist;
+		Matrix<double> iSizeCdf;
 		
 		//GC-content bias
-		map<int, vector<double> > readCountsByGC;
-		double gcFactors[101];
-		double gcStds[101];
-		Matrix<double>* gcValues;
+		double gcMeans[101];
+		double gcStd;
+		vector<default_random_engine> gc_generators;
+		vector<normal_distribution<double> > gc_normDists;
 		
-		void init();
-		int getIndexOfNucleotide(char nucleotide);
+		vector<double> gcs;
+		vector<double> readCounts;
 		
+		void initKmers();
+		int getKmerIndx(const char *s);
+		
+		void initGCParas();
+		void estimateGCParas(string outFile);
 		int countGC(string chr, long position);
-		void evaluateGC();
 		
 		void saveResults(string bamFile, string outFile);
-		void initRandNumberPool();
-		void initSamplingPool();
+		void load(string proFile);
 		
-		void load(string modelFile);
-		void initGCFactors();
-		void initParas(bool isLoaded);
-		void estimateCoverage();
+		void initCDFs();
+		void normParas(bool isLoaded);
 		
-		bool getNextLine(ifstream& ifs, string& line, int& lineNum);
+		int getSubBaseIndx1(char *kmer, int binIndx);
+		int getSubBaseIndx2(char *kmer, int binIndx);
+		int getIndelSeq(vector<int> &baseIndxs);
+		int getBaseQuality(int basePairIndx, int binIndx);
+		int getRandBaseQuality();
 		
 	public:
 		Profile();
-		Profile(string &nucleotides);
 		~Profile();
 		
-		int calculateGCPercent(char* sequence);
+		void init();
 		
 		int processRead(char* read);
 		
 		int yieldInsertSize();
-		double getStdInsertSize();
+		double getStdISize();
 		int getMaxInsertSize();
-		double getGCFactor(int gc);
-		int getReplicates(int gc);
-		int getInitBaseIndx1(int base);
-		int getInitBaseIndx2(int base);
-		int getCondBaseIndx1(int preBase, int base, int binIndx);
-		int getCondBaseIndx2(int preBase, int base, int binIndx);
-		int getBaseQuality(int base);
-		int getErrorBaseQuality(int base);
 		
-		void train(string modelFile);
+		double getGCFactor(int gc);
+		
+		void train(string proFile);
 		void train(string bamFile, string samtools, string outFile);
+		char* predict(char* refSeq, int isRead1);
 		void predict(char* refSeq, char* results, int num, int isRead1);
 		
 };

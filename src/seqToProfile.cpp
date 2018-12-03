@@ -20,6 +20,9 @@ int main(int argc, char *argv[]) {
 	string bamFile = "", targetFile = "";
 	string vcfFile = "", refFile = "";
 	string outFile = "", samtools = "";
+	
+	int kmer = 3;
+	int binCount = 50;
 
 	/*** record elapsed time ***/
 	time_t start_t, end_t;
@@ -34,12 +37,14 @@ int main(int argc, char *argv[]) {
 		{"ref", required_argument, 0, 'r'},
 		{"output", required_argument, 0, 'o'},
 		{"samtools", required_argument, 0, 's'},
+		{"kmer", required_argument, 0, 'k'},
+		{"bins", required_argument, 0, 'B'},
 		{0, 0, 0, 0}
 	};
 
 	int c;
 	//Parse command line parameters
-	while((c = getopt_long(argc, argv, "hb:t:v:r:o:s:", long_options, NULL)) != -1){
+	while((c = getopt_long(argc, argv, "hb:t:v:r:o:s:k:B:T:", long_options, NULL)) != -1){
 		switch(c){
 			case 'h':
 				usage(argv[0]);
@@ -61,6 +66,12 @@ int main(int argc, char *argv[]) {
 				break;
 			case 's':
 				samtools = optarg;
+				break;
+			case 'k':
+				kmer = atoi(optarg);
+				break;
+			case 'B':
+				binCount = atoi(optarg);
 				break;
 			default :
 				usage(argv[0]);
@@ -100,10 +111,23 @@ int main(int argc, char *argv[]) {
 		cerr << "Assume the tool has been installed and included in the system PATH!" << endl;
 	}
 	
+	if(kmer < 1 || kmer > 5) {
+		cerr << "Error: parameter \"kmer\" should be a positive integer with maximum value of 5!" << endl;
+		exit(1);
+	}
+	if(binCount < 10) {
+		cerr << "Error: parameter \"bins\" should be a positive integer with minimum value of 10!" << endl;
+		exit(1);
+	}
+	
+	config.setIntPara("kmer", kmer);
+	config.setIntPara("bins", binCount);
+	
 	/*** create genome data ***/
 	genome.loadData(vcfFile, refFile, targetFile);
 
-	/*** model training ***/
+	/*** profile learning ***/
+	profile.init();
 	profile.train(bamFile, samtools, outFile);
 	
 	end_t = time(NULL);
@@ -127,9 +151,11 @@ void usage(const char* app) {
 		<< "    -r, --ref <string>              genome reference file (.fasta) to which the reads were aligned" << endl
 		<< "    -o, --output <string>           output file" << endl
 		<< "    -s, --samtools <string>         the path of samtools [default:samtools]" << endl
+		<< "    -k, --kmer <int>                the length of kmer sequence [default:3]" << endl
+		<< "    -B, --bins <int>                the number of bins into which bases of read are grouped [default:50]" << endl
 		<< endl
 		<< "Example:" << endl
-		<< "    " << app << " -b /path/to/normal.bam -t /path/to/normal.bed -v /path/to/normal.vcf -r /path/to/ref.fa > /path/to/results.model" << endl
+		<< "    " << app << " -b /path/to/normal.bam -t /path/to/normal.bed -v /path/to/normal.vcf -r /path/to/ref.fa -k 4 -B 100 > /path/to/results.model" << endl
 		<< endl
 		<< "    " << app << " -b /path/to/normal.bam -v /path/to/normal.vcf -r /path/to/ref.fa -o /path/to/results.model -s /path/to/samtools" << endl
 		<< endl

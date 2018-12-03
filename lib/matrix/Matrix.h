@@ -21,17 +21,18 @@ class Matrix {
 	private:
 		int ROWS, COLS;
 		static double ZERO_FINAL;
-		numtype** m_matrix;
+		numtype* m_matrix;
 	public:
 		Matrix();
-		Matrix(int rows, int cols, bool reset);
+		Matrix(int rows, int cols);
+		Matrix(int rows, int cols, numtype value);
 		Matrix(const Matrix<numtype> &mat);
 		~Matrix();
 		void clear();
 		void Print() const;
 		int getROWS() const {return ROWS;}
 		int getCOLS() const {return COLS;}
-		numtype** getEntrance() const {return m_matrix;}
+		numtype* getEntrance() const {return m_matrix;}
 		
 		Matrix<numtype> transpose() const;
 		Matrix<numtype> inverse() const;
@@ -44,7 +45,10 @@ class Matrix {
 		Matrix<numtype> Rows(vector<int> index) const;
 		Matrix<numtype> Cols(vector<int> index) const;
 		void setRow(int row, Matrix<numtype> &mat);
+		void setRow(int row, numtype value);
 		void setCol(int col, Matrix<numtype> &mat);
+		void setCol(int col, numtype value);
+		void setCols(vector<int> colIndxs, Matrix<numtype> &mat);
 		Matrix<numtype> repeat(int M, int N) const;
 		Matrix<numtype> logValue(double base) const;
 		Matrix<numtype> reshape(int rows, int cols) const;
@@ -55,6 +59,9 @@ class Matrix {
 		
 		numtype get(int row, int col) const;
 		void set(int row, int col, numtype value);
+		void set(numtype value);
+		
+		void apply(numtype (*func)(numtype));
 		
 		inline Matrix<numtype> dotProduct(const Matrix<numtype> &mat) const;
 		inline Matrix<numtype> dotDivide(const Matrix<numtype> &mat) const;
@@ -88,36 +95,44 @@ Matrix<numtype>::Matrix() {
 }
 
 template <class numtype>
-Matrix<numtype>::Matrix(int rows,int cols, bool reset) : ROWS(rows), COLS(cols) {
+Matrix<numtype>::Matrix(int rows,int cols) : ROWS(rows), COLS(cols) {
 	assert(rows >= 0);
 	assert(cols >= 0);
-	if(ROWS > 0) {
-		m_matrix = new numtype*[ROWS];
-		for(size_t i = 0; i < ROWS;  i++) {
-			m_matrix[i] = new numtype[COLS];
-			if(reset) {
-				memset(m_matrix[i], 0, COLS*sizeof(numtype));
-			}
+	if(ROWS*COLS > 0) {
+		m_matrix = new numtype[ROWS*COLS];
+	}
+	else {
+		m_matrix = NULL;
+	}
+	
+}
+
+template <class numtype>
+Matrix<numtype>::Matrix(int rows, int cols, numtype value) : ROWS(rows), COLS(cols) {
+	assert(rows >= 0);
+	assert(cols >= 0);
+	if(ROWS*COLS > 0) {
+		m_matrix = new numtype[ROWS*COLS];
+		int n = ROWS*COLS;
+		for(int i = 0; i < n; i++) {
+			m_matrix[i] = value;
 		}
 	}
 	else {
 		m_matrix = NULL;
 	}
-	//ZERO_FINAL = 2.2204e-16;
 	
 }
 
 template <class numtype>
-Matrix<numtype>::Matrix(const Matrix<numtype> &mat) : ROWS(mat.ROWS), COLS(mat.COLS){
-	assert(mat.ROWS >= 0);
-	assert(mat.COLS >= 0);
-	if(ROWS > 0) {
-		m_matrix = new numtype*[ROWS];
-		for(size_t i = 0; i < ROWS;  i++) {
-			m_matrix[i] = new numtype[COLS];
-			for(size_t j = 0; j < COLS; j++) {
-				m_matrix[i][j] = mat.m_matrix[i][j];
-			}
+Matrix<numtype>::Matrix(const Matrix<numtype> &mat) {
+	ROWS = mat.ROWS;
+	COLS = mat.COLS;
+	if(ROWS*COLS > 0) {
+		m_matrix = new numtype[ROWS*COLS];
+		int n = ROWS*COLS;
+		for(int i = 0; i < n; i++) {
+			m_matrix[i] = mat.m_matrix[i];
 		}
 	}
 	else {
@@ -136,21 +151,19 @@ void Matrix<numtype>::clear() {
 	if(m_matrix == NULL) {
 		return;	
 	}
-	for(size_t i = 0; i < ROWS; i++) {
-		delete[] m_matrix[i];
-		m_matrix[i] = NULL;
-	}
-    	delete[] m_matrix;
+    delete[] m_matrix;
 	m_matrix = NULL;
 	ROWS = COLS = 0;
-	m_matrix = NULL;
 }
 
 template <class numtype>
 void Matrix<numtype>::Print() const {
-    for(size_t i = 0; i < ROWS;  i++) {
-		for(size_t j = 0; j < COLS;  j++) {
-			cerr << m_matrix[i][j] << '\t';
+	if(m_matrix == NULL) {
+		return;
+	}
+	for(int i = 0; i < ROWS;  i++) {
+		for(int j = 0; j < COLS;  j++) {
+			cerr << m_matrix[i*COLS+j] << '\t';
 		}
 		cerr << endl;
 	}
@@ -158,10 +171,10 @@ void Matrix<numtype>::Print() const {
 
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::transpose() const {
-	Matrix<numtype> ret(COLS, ROWS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[j][i] = m_matrix[i][j];
+	Matrix<numtype> ret(COLS, ROWS);
+	for(int i = 0; i < COLS;  i++) {
+		for(int j = 0; j < ROWS;  j++) {
+			ret.m_matrix[i*ROWS+j] = m_matrix[j*COLS+i];
 		}
 	}
 	return ret;
@@ -173,12 +186,12 @@ Matrix<numtype> Matrix<numtype>::inverse() const {
 	numtype det = determinant();
 	assert(det != 0);
 	
-	Matrix<numtype> ret(ROWS, COLS, false);
+	Matrix<numtype> ret(ROWS, COLS);
 	
-	size_t i, j, k, l, m, n;
+	int i, j, k, l, m, n;
 	for(i = 0; i < ROWS; i++) {
 		for(j = 0; j < COLS; j++) {
-			Matrix<numtype> a(ROWS-1, COLS-1, false);
+			Matrix<numtype> a(ROWS-1, COLS-1);
 			for(m = -1, k = 0; k < ROWS-1; k++) {
 				m++;
 				if(m == i) {
@@ -189,18 +202,18 @@ Matrix<numtype> Matrix<numtype>::inverse() const {
 					if(n == j) {
 						n++;
 					}
-					a.m_matrix[k][l] = m_matrix[m][n];
+					a.m_matrix[k*(COLS-1)+l] = m_matrix[m*COLS+n];
 				}
 			}
 			numtype temp = a.determinant();
 			if((i+j)%2 == 0) {
-				ret.m_matrix[j][i] = (numtype) temp/det;
+				ret.m_matrix[j*COLS+i] = (numtype) temp/det;
 			}
 			else {
-				ret.m_matrix[j][i] = (numtype) -temp/det;
+				ret.m_matrix[j*COLS+i] = (numtype) -temp/det;
 			}
-			if(fabs(ret.m_matrix[j][i]) < ZERO_FINAL) {
-				ret.m_matrix[j][i] = 0;
+			if(fabs(ret.m_matrix[j*COLS+i]) < ZERO_FINAL) {
+				ret.m_matrix[j*COLS+i] = 0;
 			}
 		}
 	}
@@ -212,13 +225,13 @@ template <class numtype>
 numtype Matrix<numtype>::determinant() const {
 	assert(ROWS == COLS);
 	Matrix<numtype> cur_mat(*this);
-	size_t i, j, k, m;
-	size_t flag = 0, switchcount = 0;
+	int i, j, k, m;
+	int flag = 0, switchcount = 0;
 	numtype a, ret = 1;
 	for(i = 0; i < ROWS-1; i++) {
 		j = i+1;
-		if(cur_mat.m_matrix[i][i] == 0) {
-			while(cur_mat.m_matrix[j][i] == 0) {
+		if(cur_mat.m_matrix[i*COLS+i] == 0) {
+			while(cur_mat.m_matrix[j*COLS+i] == 0) {
 				j++;
 				if(j == ROWS) {
 					flag = 1;
@@ -229,22 +242,24 @@ numtype Matrix<numtype>::determinant() const {
 				continue;
 			}
 			switchcount++;
-			numtype *temp = cur_mat.m_matrix[i];
-			cur_mat.m_matrix[i] = cur_mat.m_matrix[j];
-			cur_mat.m_matrix[j] = temp;
+			for(k = 0; k < COLS; k++) {
+				numtype temp = cur_mat.m_matrix[i*COLS+k];
+				cur_mat.m_matrix[i*COLS+k] = cur_mat.m_matrix[j*COLS+k];
+				cur_mat.m_matrix[j*COLS+k] = temp;
+			}
 		}
 		for(j = i+1; j < ROWS; j++) {
-			if(cur_mat.m_matrix[j][i] == 0) {
+			if(cur_mat.m_matrix[j*COLS+i] == 0) {
 				continue;
 			}
-			a = cur_mat.m_matrix[j][i]/cur_mat.m_matrix[i][i];
+			a = cur_mat.m_matrix[j*COLS+i]/cur_mat.m_matrix[i*COLS+i];
 			for(k = 0; k < COLS; k++) {
-				cur_mat.m_matrix[j][k] -= a*cur_mat.m_matrix[i][k];
+				cur_mat.m_matrix[j*COLS+k] -= a*cur_mat.m_matrix[i*COLS+k];
 			}
 		}
 	}
 	for(i = 0; i < ROWS; i++) {
-		ret *= cur_mat.m_matrix[i][i];
+		ret *= cur_mat.m_matrix[i*COLS+i];
 	}
 	if(switchcount%2) {
 		ret = -ret;
@@ -256,7 +271,7 @@ numtype Matrix<numtype>::determinant() const {
 template <class numtype>
 numtype Matrix<numtype>::determinant() const {
 	assert(ROWS == COLS);
-	size_t i, j, k, m;
+	int i, j, k, m;
 	numtype a, ret = 0;
 	int *temp = new int[COLS];
 	for(i = 0; i < COLS; i++) {
@@ -291,20 +306,19 @@ numtype Matrix<numtype>::determinant() const {
 template <class numtype>
 numtype Matrix<numtype>::sum() const {
 	numtype ret = 0;
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret += m_matrix[i][j];
-		}
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret += m_matrix[i];
 	}
 	return ret;
 }
 
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::sumRows() const {
-	Matrix<numtype> ret(1, COLS, true);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[0][j] += m_matrix[i][j];
+	Matrix<numtype> ret(1, COLS, 0);
+	for(int i = 0; i < ROWS; i++) {
+		for(int j = 0; j < COLS; j++) {
+			ret.m_matrix[j] += m_matrix[i*COLS+j];
 		}
 	}
 	return ret;
@@ -312,10 +326,10 @@ Matrix<numtype> Matrix<numtype>::sumRows() const {
 
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::sumCols() const {
-	Matrix<numtype> ret(ROWS, 1, true);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][0] += m_matrix[i][j];
+	Matrix<numtype> ret(ROWS, 1, 0);
+	for(int i = 0; i < ROWS; i++) {
+		for(int j = 0; j < COLS; j++) {
+			ret.m_matrix[i] += m_matrix[i*COLS+j];
 		}
 	}
 	return ret;
@@ -324,19 +338,20 @@ Matrix<numtype> Matrix<numtype>::sumCols() const {
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::Row(int row) const {
 	assert(row >= 0 && row < ROWS);
-	Matrix<numtype> ret(1, COLS, false);
-	for(size_t j = 0; j < COLS; j++) {
-		ret.m_matrix[0][j] = m_matrix[row][j];
+	Matrix<numtype> ret(1, COLS);
+	for(int j = 0; j < COLS; j++) {
+		ret.m_matrix[j] = m_matrix[row*COLS+j];
 	}
 	return ret;
 }
 
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::Rows(vector<int> index) const {
-	Matrix<numtype> ret(index.size(), COLS, false);
-	for(size_t i = 0; i < index.size(); i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[index[i]][j];
+	Matrix<numtype> ret(index.size(), COLS);
+	for(int i = 0; i < index.size(); i++) {
+		assert(index[i] >= 0 && index[i] < ROWS);
+		for(int j = 0; j < COLS; j++) {
+			ret.m_matrix[i*COLS+j] = m_matrix[index[i]*COLS+j];
 		}
 	}
 	return ret;
@@ -345,9 +360,9 @@ Matrix<numtype> Matrix<numtype>::Rows(vector<int> index) const {
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::Col(int col) const {
 	assert(col >= 0 && col < COLS);
-	Matrix<numtype> ret(ROWS, 1, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		ret.m_matrix[i][0] = m_matrix[i][col];
+	Matrix<numtype> ret(ROWS, 1);
+	for(int i = 0; i < ROWS; i++) {
+		ret.m_matrix[i] = m_matrix[i*COLS+col];
 	}
 	return ret;
 }
@@ -355,9 +370,10 @@ Matrix<numtype> Matrix<numtype>::Col(int col) const {
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::Cols(vector<int> index) const {
 	Matrix<numtype> ret(ROWS, index.size(), false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < index.size(); j++) {
-			ret.m_matrix[i][j] = m_matrix[i][index[j]];
+	for(int j = 0; j < index.size(); j++) {
+		assert(index[j] >= 0 && index[j] < COLS);
+		for(int i = 0; i < ROWS; i++) {
+			ret.m_matrix[i*index.size()+j] = m_matrix[i*COLS+index[j]];
 		}
 	}
 	return ret;
@@ -366,27 +382,45 @@ Matrix<numtype> Matrix<numtype>::Cols(vector<int> index) const {
 template <class numtype>
 void Matrix<numtype>::setRow(int row, Matrix<numtype> &mat) {
 	assert(row >= 0 && row < ROWS);
-	for(size_t j = 0; j < COLS; j++) {
-		m_matrix[row][j] = mat.m_matrix[0][j];
+	assert(mat.ROWS == 1 && COLS == mat.COLS);
+	for(int j = 0; j < COLS; j++) {
+		m_matrix[row*COLS+j] = mat.m_matrix[j];
+	}
+}
+
+template <class numtype>
+void Matrix<numtype>::setRow(int row, numtype value) {
+	assert(row >= 0 && row < ROWS);
+	for(int j = 0; j < COLS; j++) {
+		m_matrix[row*COLS+j] = value;
 	}
 }
 
 template <class numtype>
 void Matrix<numtype>::setCol(int col, Matrix<numtype> &mat) {
 	assert(col >= 0 && col < COLS);
-	for(size_t i = 0; i < ROWS; i++) {
-		m_matrix[i][col] = mat.m_matrix[i][0];
+	assert(mat.COLS == 1 && ROWS == mat.ROWS);
+	for(int i = 0; i < ROWS; i++) {
+		m_matrix[i*COLS+col] = mat.m_matrix[i];
+	}
+}
+
+template <class numtype>
+void Matrix<numtype>::setCol(int col, numtype value) {
+	assert(col >= 0 && col < COLS);
+	for(int i = 0; i < ROWS; i++) {
+		m_matrix[i*COLS+col] = value;
 	}
 }
 
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::repeat(int M, int N) const {
-	Matrix<numtype> ret(M*ROWS, N*COLS, false);
-	for(size_t m = 0; m < M; m++) {
-		for(size_t n = 0; n < N; n++) {
-			for(size_t i = 0; i < ROWS; i++) {
-				for(size_t j = 0; j < COLS; j++) {
-					ret.m_matrix[i+m*ROWS][j+n*COLS] = m_matrix[i][j];
+	Matrix<numtype> ret(M*ROWS, N*COLS);
+	for(int m = 0; m < M; m++) {
+		for(int n = 0; n < N; n++) {
+			for(int i = 0; i < ROWS; i++) {
+				for(int j = 0; j < COLS; j++) {
+					ret.m_matrix[(i+m*ROWS)*N*COLS+j+n*COLS] = m_matrix[i*COLS+j];
 				}
 			}
 		}
@@ -395,31 +429,19 @@ Matrix<numtype> Matrix<numtype>::repeat(int M, int N) const {
 }
 
 template <class numtype>
-Matrix<numtype> Matrix<numtype>::logValue(double base) const {
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = log(m_matrix[i][j]+ZERO_FINAL)/log(base);
-		}
-	}
-	return ret;
-}
-
-template <class numtype>
 Matrix<numtype> Matrix<numtype>::reshape(int rows, int cols) const {
-	assert(rows >= 0);
-	assert(cols >= 0);
-	if(rows == 0)
+	assert(rows > 0 || cols > 0);
+	if(rows <= 0)
 		rows = ROWS*COLS/cols;
-	if(cols == 0)
+	if(cols <= 0)
 		cols = ROWS*COLS/rows;
 	
 	assert(rows*cols == ROWS*COLS);
-	Matrix<numtype> ret(rows, cols, false);
-	size_t m = 0, n = 0;
-	for(size_t j = 0; j < cols; j++) {
-		for(size_t i = 0; i < rows; i++) {
-			ret.m_matrix[i][j] = m_matrix[m][n];
+	Matrix<numtype> ret(rows, cols);
+	int m = 0, n = 0;
+	for(int j = 0; j < cols; j++) {
+		for(int i = 0; i < rows; i++) {
+			ret.m_matrix[i*cols+j] = m_matrix[m*COLS+n];
 			m++;
 			if(m == ROWS) {
 				m = 0;
@@ -434,30 +456,27 @@ template <class numtype>
 void Matrix<numtype>::resize(int rows, int cols, bool reset) {
 	assert(rows >= 0 && cols >= 0);
 	
-	numtype** m_matrix_new = new numtype*[rows];
-	for(size_t i = 0; i < rows;  i++) {
-		m_matrix_new[i] = new numtype[cols];
+	if(rows*cols == 0) {
+		delete[] m_matrix;
+		m_matrix = NULL;
+		ROWS = COLS = 0;
+		return;
+	}
+	
+	if(ROWS != rows || COLS != cols) {
+		numtype *m_matrix_n = new numtype[rows*cols];
 		if(reset) {
-			for(size_t j = 0; j < cols; j++) {
-				if(i < ROWS && j < COLS) {
-					m_matrix_new[i][j] = m_matrix[i][j];
-				}
-				else {
-					m_matrix_new[i][j] = 0;
+			for(int i = 0; i < rows;  i++) {
+				for(int j = 0; j < cols; j++) {
+					m_matrix_n[i*cols+j] = (i < ROWS && j < COLS)? m_matrix[i*COLS+j]:0;
 				}
 			}
 		}
+		ROWS = rows;
+		COLS = cols;
+		delete[] m_matrix;
+		m_matrix = m_matrix_n;
 	}
-	
-	for(size_t i = 0; i < ROWS; i++) {
-		delete[] m_matrix[i];
-	}
-	delete[] m_matrix;
-	
-	ROWS = rows;
-	COLS = cols;
-	
-	m_matrix = m_matrix_new;
 }
 
 template <class numtype>
@@ -467,17 +486,17 @@ void Matrix<numtype>::normalize(bool direction) {
 	}
 	if(direction == 1) {
 		Matrix<numtype> temp = sumRows();
-		for(size_t i = 0; i < ROWS; i++) {
-			for(size_t j = 0; j < COLS; j++) {
-				m_matrix[i][j] /= (ZERO_FINAL + temp.m_matrix[0][j]);
+		for(int i = 0; i < ROWS; i++) {
+			for(int j = 0; j < COLS; j++) {
+				m_matrix[i*COLS+j] /= (ZERO_FINAL + temp.m_matrix[j]);
 			}
 		}
 	}
 	else {
 		Matrix<numtype> temp = sumCols();
-		for(size_t i = 0; i < ROWS; i++) {
-			for(size_t j = 0; j < COLS; j++) {
-				m_matrix[i][j] /= (ZERO_FINAL + temp.m_matrix[i][0]);
+		for(int i = 0; i < ROWS; i++) {
+			for(int j = 0; j < COLS; j++) {
+				m_matrix[i*COLS+j] /= (ZERO_FINAL + temp.m_matrix[i]);
 			}
 		}
 	}
@@ -488,14 +507,14 @@ Matrix<numtype> Matrix<numtype>::cumsum() const {
 	if(m_matrix == NULL) {
 		return *this;
 	}
-	Matrix<numtype> ret(ROWS, COLS, true);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
+	Matrix<numtype> ret(ROWS, COLS, 0);
+	for(int i = 0; i < ROWS; i++) {
+		for(int j = 0; j < COLS; j++) {
 			if(j > 0) {
-				ret.m_matrix[i][j] = m_matrix[i][j] + ret.m_matrix[i][j-1];
+				ret.m_matrix[i*COLS+j] = m_matrix[i*COLS+j] + ret.m_matrix[i*COLS+j-1];
 			}
 			else {
-				ret.m_matrix[i][j] = m_matrix[i][j];
+				ret.m_matrix[i*COLS+j] = m_matrix[i*COLS+j];
 			}
 		}
 	}
@@ -505,7 +524,7 @@ Matrix<numtype> Matrix<numtype>::cumsum() const {
 template <class numtype>
 Matrix<numtype> Matrix<numtype>::concat(Matrix<numtype> &mat, int direction) const {
 	int rows, cols;
-	size_t i, j;
+	int i, j;
 	if(m_matrix == NULL) {
 		Matrix<numtype> ret = mat;
 		return ret;
@@ -514,13 +533,13 @@ Matrix<numtype> Matrix<numtype>::concat(Matrix<numtype> &mat, int direction) con
 		assert(COLS == mat.COLS);
 		rows = ROWS+mat.ROWS;
 		cols = COLS;
-		Matrix<numtype> ret(rows, cols, false);
+		Matrix<numtype> ret(rows, cols);
 		for(j = 0; j < cols; j++) {
 			for(i = 0; i < ROWS; i++) {
-				ret.m_matrix[i][j] = m_matrix[i][j];
+				ret.m_matrix[i*cols+j] = m_matrix[i*COLS+j];
 			}
 			for(; i < rows; i++) {
-				ret.m_matrix[i][j] = mat.m_matrix[i-ROWS][j];
+				ret.m_matrix[i*cols+j] = mat.m_matrix[(i-ROWS)*mat.COLS+j];
 			}
 		}
 		return ret;
@@ -529,13 +548,13 @@ Matrix<numtype> Matrix<numtype>::concat(Matrix<numtype> &mat, int direction) con
 		assert(ROWS == mat.ROWS);
 		rows = ROWS;
 		cols = COLS+mat.COLS;
-		Matrix<numtype> ret(rows, cols, false);
+		Matrix<numtype> ret(rows, cols);
 		for(i = 0; i < rows; i++) {
 			for(j = 0; j < COLS; j++) {
-				ret.m_matrix[i][j] = m_matrix[i][j];
+				ret.m_matrix[i*cols+j] = m_matrix[i*COLS+j];
 			}
 			for(; j < cols; j++) {
-				ret.m_matrix[i][j] = mat.m_matrix[i][j-COLS];
+				ret.m_matrix[i*cols+j] = mat.m_matrix[i*mat.COLS+j-COLS];
 			}
 		}
 		return ret;
@@ -546,25 +565,40 @@ template <class numtype>
 numtype Matrix<numtype>::get(int row, int col) const {
 	assert(row >= 0 && row < ROWS);
 	assert(col >= 0 && col < COLS);
-	return m_matrix[row][col];
+	return m_matrix[row*COLS+col];
 }
 
 template <class numtype>
 void Matrix<numtype>::set(int row, int col, numtype value) {
 	assert(row >= 0 && row < ROWS);
 	assert(col >= 0 && col < COLS);
-	m_matrix[row][col] = value;
+	m_matrix[row*COLS+col] = value;
+}
+
+template <class numtype>
+void Matrix<numtype>::set(numtype value) {
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		m_matrix[i] = value;
+	}
+}
+
+template <class numtype>
+void Matrix<numtype>::apply(numtype (*func)(numtype)) {
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		m_matrix[i] = (*func)(m_matrix[i]);
+	}
 }
 
 template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::dotProduct(const Matrix<numtype> &mat) const {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]*mat.m_matrix[i][j];
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]*mat.m_matrix[i];
 	}
 	return ret;
 }
@@ -573,11 +607,10 @@ template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::dotDivide(const Matrix<numtype> &mat) const {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]/(ZERO_FINAL+mat.m_matrix[i][j]);
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]/(ZERO_FINAL+mat.m_matrix[i]);
 	}
 	return ret;
 }
@@ -586,22 +619,20 @@ template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator+(const Matrix<numtype> &mat) const {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]+mat.m_matrix[i][j];
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]+mat.m_matrix[i];
 	}
 	return ret;
 }
 
 template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator+(numtype a) const {
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]+a;
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]+a;
 	}
 	return ret;
 }
@@ -610,10 +641,9 @@ template <class numtype>
 inline void Matrix<numtype>::operator+=(Matrix<numtype> &mat) {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			m_matrix[i][j] = m_matrix[i][j]+mat.m_matrix[i][j];
-		}
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		m_matrix[i] += mat.m_matrix[i];
 	}
 }
 
@@ -621,22 +651,20 @@ template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator-(const Matrix<numtype> &mat) const {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]-mat.m_matrix[i][j];
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]-mat.m_matrix[i];
 	}
 	return ret;
 }
 
 template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator-(numtype a) const {
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]-a;
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]-a;
 	}
 	return ret;
 }
@@ -645,24 +673,23 @@ template <class numtype>
 inline void Matrix<numtype>::operator-=(Matrix<numtype> &mat) {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			m_matrix[i][j] = m_matrix[i][j]-mat.m_matrix[i][j];
-		}
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		m_matrix[i] -= mat.m_matrix[i];
 	}
 }
 
 template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator*(const Matrix<numtype> &mat) const {
 	assert(COLS == mat.ROWS);
-	Matrix<numtype> ret(ROWS, mat.COLS, true);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < mat.COLS; j++) {
-			for(size_t k = 0; k < COLS; k++) {
-				ret.m_matrix[i][j] += m_matrix[i][k]*mat.m_matrix[k][j];
+	Matrix<numtype> ret(ROWS, mat.COLS, 0);
+	for(int i = 0; i < ROWS; i++) {
+		for(int j = 0; j < mat.COLS; j++) {
+			for(int k = 0; k < COLS; k++) {
+				ret.m_matrix[i*mat.COLS+j] += m_matrix[i*COLS+k]*mat.m_matrix[k*mat.COLS+j];
 			}
-			if(fabs(ret.m_matrix[i][j]) < ZERO_FINAL) {
-				ret.m_matrix[i][j] = 0;
+			if(fabs(ret.m_matrix[i*mat.COLS+j]) < ZERO_FINAL) {
+				ret.m_matrix[i*mat.COLS+j] = 0;
 			}
 		}
 	}
@@ -671,11 +698,10 @@ inline Matrix<numtype> Matrix<numtype>::operator*(const Matrix<numtype> &mat) co
 
 template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator*(numtype a) const {
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]*a;
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]*a;
 	}
 	return ret;
 }
@@ -684,10 +710,9 @@ template <class numtype>
 inline void Matrix<numtype>::operator*=(Matrix<numtype> &mat) {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			m_matrix[i][j] = m_matrix[i][j]*mat.m_matrix[i][j];
-		}
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		m_matrix[i] *= mat.m_matrix[i];
 	}
 }
 
@@ -702,14 +727,10 @@ inline Matrix<numtype> Matrix<numtype>::operator/(const Matrix<numtype> &mat) co
 template <class numtype>
 inline Matrix<numtype> Matrix<numtype>::operator/(numtype a) const {
 	assert(a != 0);
-	if(a == 0) {
-		a = ZERO_FINAL;
-	}
-	Matrix<numtype> ret(ROWS, COLS, false);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			ret.m_matrix[i][j] = m_matrix[i][j]/a;
-		}
+	Matrix<numtype> ret(ROWS, COLS);
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		ret.m_matrix[i] = m_matrix[i]/a;
 	}
 	return ret;
 }
@@ -718,32 +739,24 @@ template <class numtype>
 inline void Matrix<numtype>::operator/=(Matrix<numtype> &mat) {
 	assert(ROWS == mat.ROWS);
 	assert(COLS == mat.COLS);
-	for(size_t i = 0; i < ROWS; i++) {
-		for(size_t j = 0; j < COLS; j++) {
-			m_matrix[i][j] = m_matrix[i][j]/(ZERO_FINAL+mat.m_matrix[i][j]);
-		}
+	int n = ROWS*COLS;
+	for(int i = 0; i < n; i++) {
+		m_matrix[i] /= (ZERO_FINAL+mat.m_matrix[i]);
 	}
 }
 
 template <class numtype>
 inline void Matrix<numtype>::operator=(const Matrix<numtype> &mat) {
-	size_t i, j;
-	for(i = 0; i < ROWS; i++) {
-		delete[] m_matrix[i];
+	int i, j;
+	if(ROWS != mat.ROWS || COLS != mat.COLS) {
+		delete[] m_matrix;
+		ROWS = mat.ROWS;
+		COLS = mat.COLS;
+		m_matrix = new numtype[ROWS*COLS];
 	}
-	delete[] m_matrix;
-	
-	ROWS = mat.ROWS;
-	COLS = mat.COLS;
-	
-	//m_matrix = mat.m_matrix;
-	
-	m_matrix = new numtype*[ROWS];
-	for(i = 0; i < ROWS; i++) {
-		m_matrix[i] = new numtype[COLS];
-		for(j = 0; j < COLS; j++) {
-			m_matrix[i][j] = mat.m_matrix[i][j];
-		}
+	int n = ROWS*COLS;
+	for(i = 0; i < n; i++) {
+		m_matrix[i] = mat.m_matrix[i];
 	}
 	
 }

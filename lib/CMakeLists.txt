@@ -42,11 +42,14 @@ target_link_libraries(genome segment fastahack snp split mydefine)
 # Build the profile library
 include_directories(profile)
 add_library(profile profile/Profile.cpp)
-target_link_libraries(profile split mydefine)
+target_link_libraries(profile split mydefine psifunc)
 
 # Build the segment library
 include_directories(segment)
 add_library(segment segment/Segment.cpp)
 target_link_libraries(segment fastahack snp mydefine)
 
-
+# Build the psifunc library
+include_directories(psifunc)
+add_library(psifunc psifunc/psiFunc.cpp)
+target_link_libraries(psifunc)
