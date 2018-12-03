@@ -1,2 +1,2 @@
-# ngsGCE
-a novel next-generation sequencing simulator using genomic contexts based error profiles
+# simuscop
+a novel tool to reliably Simulate Illumina Sequencing data based on position and Context dependant Profiles
