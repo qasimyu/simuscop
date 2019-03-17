@@ -26,6 +26,9 @@ void ThreadPool::pool_init() {
 	for(size_t i = 0; i < max_thread_num; i++) {
 		Thread* thread = new Thread();
 		
+		pthread_create(thread->getThreadEntrance(), NULL, threadFun, this);
+		thread_list.push_back(thread);
+		
 		#ifdef __linux__
 			cpu_set_t cpuset;
 			CPU_ZERO(&cpuset);
@@ -35,17 +38,15 @@ void ThreadPool::pool_init() {
 			}
 		#endif
 		
-		pthread_create(thread->getThreadEntrance(), NULL, threadFun, this);
-		thread_list.push_back(thread);
-		
 		unsigned seed = chrono::system_clock::now().time_since_epoch().count();
-		default_random_engine generator(seed);
+		mt19937 generator(seed);
+		//default_random_engine generator(seed);
 		minRandNumber = generator.min();
 		maxRandNumber = generator.max();
 		//uniform_real_distribution<double> realDist(0, maxNumber);
 		//uniform_int_distribution<long> intDist(0, (long) maxNumber);
-		realGenerators.insert(make_pair(thread->getThreadId(), generator));
-		intGenerators.insert(make_pair(thread->getThreadId(), generator));
+		realGenerators.insert(pair<pthread_t, mt19937>(thread->getThreadId(), generator));
+		intGenerators.insert(pair<pthread_t, mt19937>(thread->getThreadId(), generator));
 	}
 }
 
@@ -207,11 +208,6 @@ double ThreadPool::randomDouble(double start, double end) {
 long ThreadPool::randomInteger(long start, long end) {
 	pthread_t tid = pthread_self();
 	double number = intGenerators[tid]();
-	/*
-	char cmd[100];
-	sprintf(cmd, "echo %ld >> %x.int", number, tid);
-	system(cmd);
-	*/
 	return start+(end-start)*((number-minRandNumber)/(maxRandNumber-minRandNumber+1.0));
 }
 

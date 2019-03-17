@@ -160,8 +160,8 @@ class ThreadPool {
 		pthread_cond_t work_ready;
 		
 		long minRandNumber, maxRandNumber;
-		map<pthread_t, default_random_engine> realGenerators;
-		map<pthread_t, default_random_engine> intGenerators;
+		map<pthread_t, mt19937> realGenerators;
+		map<pthread_t, mt19937> intGenerators;
 		
 		void thread_routine();
 		static void* threadFun(void *object) {
