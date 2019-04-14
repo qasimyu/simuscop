@@ -386,6 +386,11 @@ int Profile::countGC(string chr, long position) {
 	position -= 1;
 	
 	int i, k;
+	if(chr.compare("X") == 0 || chr.compare("Y") == 0 || chr.compare("M") == 0)
+	{
+		return -1;
+	}
+	/*
 	for(i = 0; i < chr.length(); i++) {
 		k = chr[i]-'0';
 		if(!(k >= 0 && k <= 9)) {
@@ -395,6 +400,7 @@ int Profile::countGC(string chr, long position) {
 	if(i < chr.length()) {
 		return -1;
 	}
+	*/
 	
 	if(preChr.compare(chr) == 0) {
 		if(refLen == 0) {
@@ -1214,7 +1220,9 @@ void Profile::train(string bamFile, string samtools, string outFile) {
 
 	int wxs = (genome.getInTargets().empty())? 0:1;
 	long minReadsRequired = 2000000;
-	if((wxs == 0 && count < minReadsRequired) || (wxs == 1 && count < 2*minReadsRequired)) {
+	double med_rc = median(readCounts);
+	// if((wxs == 0 && count < minReadsRequired) || (wxs == 1 && count < 2*minReadsRequired)) {
+	if(med_rc < 5) {
 		cerr << "\nWarning: no enough reads to evaluate GC-content effects!" << endl;		
 		initGCParas();
 	}
