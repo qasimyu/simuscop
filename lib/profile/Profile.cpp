@@ -211,6 +211,7 @@ int Profile::processRead(char* read) {
 		return 0;
 	}
 
+	chr = abbrOfChr(chr);
 	v_it = find(chromosomes.begin(), chromosomes.end(), chr);
 	if(v_it == chromosomes.end()) {
 		return 0;
