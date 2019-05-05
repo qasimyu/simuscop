@@ -27,9 +27,6 @@ threads = 4
 ## [optional] print the intermediate information, should be 0 or 1 (default: 1)
 verbose = 1
 
-## [required] the length of read
-readLength = 150
-
 ## [required] sequencing coverage
 coverage = 10
 
