@@ -20,6 +20,7 @@ include_directories (
 	${SimuSCoP_SOURCE_DIR}/lib/split
 	${SimuSCoP_SOURCE_DIR}/lib/threadpool
 	${SimuSCoP_SOURCE_DIR}/lib/psifunc
+	${SimuSCoP_SOURCE_DIR}/lib/vcfparser
 )
 
 add_executable(seqToProfile src/seqToProfile.cpp)

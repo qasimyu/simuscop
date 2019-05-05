@@ -124,15 +124,16 @@ void Segment::clearSegSequences() {
 void Segment::generateSegSequences() {
 	int ploidy = config.getIntPara("ploidy");
 	vector<SNP>& snpsOfChr = genome.getSimuSNPs(segChr);
-	vector<SNV>& snvsOfChr = genome.getSNVs(genome.getCurrentPopu(), segChr);
-	vector<Insert>& insertsOfChr = genome.getInserts(genome.getCurrentPopu(), segChr);
-	vector<Del>& delsOfChr = genome.getDels(genome.getCurrentPopu(), segChr);
+	vector<SNV>& snvsOfChr = genome.getSimuSNVs(genome.getCurrentPopu(), segChr);
+	vector<Insert>& insertsOfChr = genome.getSimuInserts(genome.getCurrentPopu(), segChr);
+	vector<Deletion>& delsOfChr = genome.getSimuDels(genome.getCurrentPopu(), segChr);
 	
 	if(CN == 0) {
 		segSequences = NULL;
 		return;
 	}
 
+	//char* refSeq = genome.getSubRefSequence(segChr, segStartPos-1, getRefSize());
 	char* refSeq = genome.getSubSequence(segChr, segStartPos-1, getRefSize());
 	if(refSeq == NULL) {
 		segSequences = NULL;
@@ -267,14 +268,17 @@ void Segment::generateSegSequences() {
 	k = 0;
 	for(i = 0; i < snvsOfChr.size(); i++) {
 		SNV snv = snvsOfChr[i];
-		if(snv.pos >= segStartPos && snv.pos <= segEndPos) {
-			int sindx = snv.pos-segStartPos;
-			if(snv.type.compare("homo") == 0) {
+		long pos = snv.getPosition();
+		if(pos >= segStartPos && pos <= segEndPos) {
+			int sindx = pos-segStartPos;
+			varType type = snv.getType();
+			char alt = snv.getAlt();
+			if(type == homo) {
 				for(j = 0; j < ploidy; j++) {
 					string& segSeq = segSeqs[j];
 					unsigned int segLen = segSeq.length();
 					for(int t = 0; t < segLen/refSize; t++) {
-						segSeq[sindx+t*refSize] = snv.alt;
+						segSeq[sindx+t*refSize] = alt;
 					}
 				}
 			}
@@ -284,7 +288,7 @@ void Segment::generateSegSequences() {
 						string& segSeq = segSeqs[mIndx[j]];
 						unsigned int segLen = segSeq.length();
 						for(int t = 0; t < segLen/refSize; t++) {
-							segSeq[sindx+t*refSize] = snv.alt;
+							segSeq[sindx+t*refSize] = alt;
 						}
 					}
 				}
@@ -297,7 +301,7 @@ void Segment::generateSegSequences() {
 						string& segSeq = segSeqs[j];
 						unsigned int segLen = segSeq.length();
 						for(int t = 0; t < segLen/refSize; t++) {
-							segSeq[sindx+t*refSize] = snv.alt;
+							segSeq[sindx+t*refSize] = alt;
 						}
 					}
 				}
@@ -307,64 +311,139 @@ void Segment::generateSegSequences() {
 	}
 	
 	//simu Insert
-	map<int, unsigned int> insertedSeq;
-	map<int, unsigned int>::iterator m_it;
-	int insertLen = 0;
+	map<int, map<int, int> > insertsPerhaploidy;
+	map<int, int>::iterator m_it;
+	int* insertLens = new int[ploidy];
+	memset(insertLens, 0, ploidy*sizeof(int));
+	k = 0;
 	for(i = 0; i < insertsOfChr.size(); i++) {
 		Insert insert = insertsOfChr[i];
-		if(insert.pos >= segStartPos && insert.pos <= segEndPos) {
-			int sindx = insert.pos-segStartPos;
-			int offset = 0;
-			for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
-				if((*m_it).first <= sindx) {
-					offset += (*m_it).second;
+		long pos = insert.getPosition();
+		if(pos >= segStartPos && pos <= segEndPos) {
+			int sindx = pos+1-segStartPos; // insert before location pos+1
+			varType type = insert.getType();
+			string seq = insert.getSequence();
+			if(type == homo) {
+				for(j = 0; j < ploidy; j++) {
+					int offset = 0;
+					map<int, int>& insertedSeq = insertsPerhaploidy[j];
+					for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
+						if((*m_it).first <= sindx) {
+							offset += (*m_it).second;
+						}
+					}
+					string& segSeq = segSeqs[j];
+					int n = segSeq.length()/(refSize+insertLens[j]);
+					int len = seq.length();
+					for(int t = 0; t < n; t++) {
+						segSeq.insert(sindx+offset+t*(refSize+insertLens[j]+len), seq);
+					}
+					insertLens[j] += seq.length();
+					insertedSeq.insert(make_pair(sindx, seq.length()));
 				}
 			}
-			for(j = 0; j < ploidy; j++) {
-				string& segSeq = segSeqs[j];
-				unsigned int k = segSeq.length()/(refSize+insertLen);
-				unsigned int len = insert.seq.length();
-				for(int t = 0; t < k; t++) {
-					segSeq.insert(sindx+offset+t*(refSize+insertLen+len), insert.seq);
+			else {
+				for(j = 0; j < ploidy; j++) {
+					it = find(mIndx.begin(), mIndx.end(), j);
+					if((k == 0 && it == mIndx.end()) || (k == 1 && it != mIndx.end())) {
+						continue;
+					}
+					int offset = 0;
+					map<int, int>& insertedSeq = insertsPerhaploidy[j];
+					for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
+						if((*m_it).first <= sindx) {
+							offset += (*m_it).second;
+						}
+					}
+					string& segSeq = segSeqs[j];
+					int n = segSeq.length()/(refSize+insertLens[j]);
+					int len = seq.length();
+					for(int t = 0; t < n; t++) {
+						segSeq.insert(sindx+offset+t*(refSize+insertLens[j]+len), seq);
+					}
+					insertLens[j] += seq.length();
+					insertedSeq.insert(make_pair(sindx, seq.length()));
 				}
+				k = (k+1)%2;
 			}
-			insertLen += insert.seq.length();
-			insertedSeq.insert(make_pair(sindx, insert.seq.length()));
 		}
 	}
 	
-	//simu Del
-	map<int, unsigned int> delSeq;
-	int delLen = 0;
+	//simu Deletion
+	map<int, map<int, int> > delsPerhaploidy;
+	int* delLens = new int[ploidy];
+	memset(delLens, 0, ploidy*sizeof(int));
+	k = 0;
 	for(i = 0; i < delsOfChr.size(); i++) {
-		Del del = delsOfChr[i];
-		if(del.pos >= segStartPos && del.pos <= segEndPos) {
-			int sindx = del.pos-segStartPos;
-			int offset = 0;
-			for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
-				if((*m_it).first <= sindx) {
-					offset += (*m_it).second;
+		Deletion del = delsOfChr[i];
+		long pos = del.getPosition();
+		if(pos >= segStartPos && pos <= segEndPos) {
+			int sindx = pos-segStartPos;
+			varType type = del.getType();
+			int delLen = del.getLength();
+			if(type == homo) {
+				for(j = 0; j < ploidy; j++) {
+					int offset = 0;
+					map<int, int>& insertedSeq = insertsPerhaploidy[j];
+					for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
+						if((*m_it).first <= sindx) {
+							offset += (*m_it).second;
+						}
+					}
+					map<int, int>& delSeq = delsPerhaploidy[j];
+					for(m_it = delSeq.begin(); m_it!= delSeq.end(); m_it++) {
+						if((*m_it).first <= sindx) {
+							offset -= (*m_it).second;
+						}
+					}
+					if(sindx+offset < 0) {
+						continue;
+					}
+					string& segSeq = segSeqs[j];
+					int n = segSeq.length()/(refSize+insertLens[j]-delLens[j]);
+					for(int t = 0; t < n; t++) {
+						segSeq.erase(sindx+offset+t*(refSize+insertLens[j]-delLens[j]-delLen), delLen);
+					}
+					delLens[j] += delLen;
+					delSeq.insert(make_pair(sindx, delLen));
 				}
 			}
-			for(m_it = delSeq.begin(); m_it!= delSeq.end(); m_it++) {
-				if((*m_it).first <= sindx) {
-					offset -= (*m_it).second;
+			else {
+				for(j = 0; j < ploidy; j++) {
+					it = find(mIndx.begin(), mIndx.end(), j);
+					if((k == 0 && it == mIndx.end()) || (k == 1 && it != mIndx.end())) {
+						continue;
+					}
+					int offset = 0;
+					map<int, int>& insertedSeq = insertsPerhaploidy[j];
+					for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
+						if((*m_it).first <= sindx) {
+							offset += (*m_it).second;
+						}
+					}
+					map<int, int>& delSeq = delsPerhaploidy[j];
+					for(m_it = delSeq.begin(); m_it!= delSeq.end(); m_it++) {
+						if((*m_it).first <= sindx) {
+							offset -= (*m_it).second;
+						}
+					}
+					if(sindx+offset < 0) {
+						continue;
+					}
+					string& segSeq = segSeqs[j];
+					int n = segSeq.length()/(refSize+insertLens[j]-delLens[j]);
+					for(int t = 0; t < n; t++) {
+						segSeq.erase(sindx+offset+t*(refSize+insertLens[j]-delLens[j]-delLen), delLen);
+					}
+					delLens[j] += delLen;
+					delSeq.insert(make_pair(sindx, delLen));
 				}
+				k = (k+1)%2;
 			}
-			if(sindx+offset < 0) {
-				continue;
-			}
-			for(j = 0; j < ploidy; j++) {
-				string& segSeq = segSeqs[j];
-				unsigned int k = segSeq.length()/(refSize+insertLen-delLen);
-				for(int t = 0; t < k; t++) {
-					segSeq.erase(sindx+offset+t*(refSize+insertLen-delLen-del.len), del.len);
-				}
-			}
-			delLen += del.len;
-			delSeq.insert(make_pair(sindx, del.len));
 		}
 	}
+	delete[] insertLens;
+	delete[] delLens;
 	
 	segSequences = new char*[ploidy];
 	for(i = 0; i < ploidy; i++) {
@@ -380,11 +459,9 @@ void Segment::generateSegSequences() {
 	
 }
 
-
-
 void Segment::setReadCount(long readCount) {
 	int i;
-	double totalWL = getWeightedLength()*2/CN+2.2204e-16;
+	double totalWL = getWeightedLength()+2.2204e-16;
 	long sum = 0;
 	fragRCs.clear();
 	for(i = 0; i < fragWeights.size(); i++) {
@@ -406,6 +483,7 @@ long Segment::getReadCount() {
 	return readCount;
 }
 
+/*
 double Segment::getWeightedLength() {
 	int i, j, k;
 	double weightLen = 0;
@@ -439,6 +517,7 @@ double Segment::getWeightedLength() {
 		}
 		else if(!targetIndxs.empty()) {
 			vector<Target>& targetsOfChr = genome.getOutTargets(segChr);
+			
 			for(i = 0; i < targetIndxs.size(); i++) {
 				j = targetIndxs[i];
 				long spos = max(targetsOfChr[j].spos, segStartPos) - segStartPos;
@@ -465,6 +544,100 @@ double Segment::getWeightedLength() {
 		}
 	}
 	return weightLen*CN/2;
+}
+*/
+
+double Segment::getWeightedLength() {
+	int i, j, k, n, m;
+	int flag = 0;
+	double weightLen = 0;
+	int ploidy = config.getIntPara("ploidy");
+	if(fragWeights.empty()) {
+		if(segSequences == NULL) {
+			flag = 1;
+			generateSegSequences();
+		}
+		unsigned int fragSize = Segment::fragSize;
+		unsigned int segSize = getSeqSize()/CN;
+		if(genome.getOutTargets().empty()) {
+			for(i = 0; i < ploidy; i++) {
+				if(segSequences[i] == NULL) {
+					continue;
+				}
+				char* p = segSequences[i];
+				k = strlen(p)/fragSize;
+				for(j = 0; j < k; j++) {
+					long spos = j*fragSize;
+					long epos = (j+1)*fragSize-1;
+					char c = p[epos+1];
+					p[epos+1] = '\0';
+					int gc = calculateGCPercent(p+spos);
+					p[epos+1] = c;
+					double weight = profile.getGCFactor(gc)/fragSize;
+					fragStartPos.push_back(spos);
+					fragEndPos.push_back(epos);
+					fragWeights.push_back(weight);
+					hapIndxs.push_back(i);
+					weightLen += weight;
+				}
+				if(k*fragSize < strlen(p)) {
+					long spos = k*fragSize;
+					int gc = calculateGCPercent(p+spos);
+					double weight = profile.getGCFactor(gc)*(strlen(p)-spos)/(fragSize*fragSize);
+					fragStartPos.push_back(spos);
+					fragEndPos.push_back(strlen(p)-1);
+					fragWeights.push_back(weight);
+					hapIndxs.push_back(i);
+					weightLen += weight;
+				}
+			}
+		}
+		else if(!targetIndxs.empty()) {
+			vector<Target>& targetsOfChr = genome.getOutTargets(segChr);
+			for(i = 0; i < ploidy; i++) {
+				if(segSequences[i] == NULL) {
+					continue;
+				}
+				char* p = segSequences[i];
+				n = (seqReps.size() < ploidy)? 1:seqReps[i];
+				long refLen = strlen(p)/n;
+				for(k = 0; k < n; k++) {
+					for(j = 0; j < targetIndxs.size(); j++) {
+						m = targetIndxs[j];
+						long spos = max(targetsOfChr[m].spos, segStartPos) - segStartPos;
+						long epos = min(targetsOfChr[m].epos, segStartPos+refLen-1) - segStartPos;
+						long spos_k = spos+k*strlen(p)/n;
+						long epos_k = epos+k*strlen(p)/n;
+						char c = p[epos_k+1];
+						p[epos_k+1] = '\0';
+						int gc = calculateGCPercent(p+spos_k);
+						p[epos_k+1] = c;
+						double weight = profile.getGCFactor(gc)*(epos_k-spos_k+1)/(fragSize*fragSize);
+						fragStartPos.push_back(spos_k);
+						fragEndPos.push_back(epos_k);
+						fragWeights.push_back(weight);
+						hapIndxs.push_back(i);
+						weightLen += weight;
+					}
+				}
+			}
+		}
+		else {
+			fragStartPos.push_back(0);
+			fragEndPos.push_back(0);
+			fragWeights.push_back(0);
+			hapIndxs.push_back(0);
+		}
+		if(flag == 1) {
+			clearSegSequences();
+		}
+	}
+	else {
+		for(i = 0; i < fragWeights.size(); i++) {
+			weightLen += fragWeights[i];
+		}
+	}
+	return weightLen;
 }
 
 unsigned int Segment::getSeqSize() {
@@ -497,6 +670,207 @@ unsigned int Segment::getTargetsSize() {
 	return sum;
 }
 
+void* Segment::yieldReads(const void* args) {
+	Segment* seg = (Segment*) args;
+	if(seg->getSegSequences() == NULL || seg->getReadCount() == 0) {
+		return NULL;
+	}
+
+	int segIndx = seg->getSegIndx();
+	string segChr = seg->getSegChr();
+	long segStartPos = seg->getSegStartPos();
+	long segEndPos = seg->getSegEndPos();
+	int CN = seg->getCN();
+	char** segSequences = seg->getSegSequences();
+	vector<long>& fragStartPos = seg->getFragStartPos();
+	vector<long>& fragEndPos = seg->getFragEndPos();
+	vector<int>& hapIndxs = seg->getHapIndxs();
+
+	bool paired = config.isPairedEnd();
+	int seqLen, readLength = config.getIntPara("readLength");
+	int ploidy = config.getIntPara("ploidy");
+	
+	//cerr << "Number of reads to sample on the segment: " << seg->getReadCount() << endl;
+	
+	unsigned long bufferSize = 50000000;
+	char buf[10*readLength], buf1[10*readLength], buf2[10*readLength];
+	char *results;
+	char *outBuffer, *outBuffer1, *outBuffer2;
+	unsigned long outIndx = 0, outIndx1 = 0, outIndx2 = 0;
+	string outputDir = config.getStringPara("outputDir");
+	if(paired) {
+		outBuffer1 = new char[bufferSize];
+		outBuffer2 = new char[bufferSize];
+	}
+	else {
+		outBuffer = new char[bufferSize];
+	}
+	
+	int i, j, k;
+	
+	unsigned int refSize = seg->getRefSize();
+	unsigned int seqSize, segsize;
+	seqSize = seg->getSeqSize();
+	segsize = seqSize/CN;
+	
+	
+	vector<int> segSeqIndxs;
+	vector<int> cnStartCount;
+	int count = 0;
+	for(i = 0; i < ploidy; i++) {
+		cnStartCount.push_back(count);
+		if(segSequences[i] == NULL) {
+			continue;
+		}
+		k = strlen(segSequences[i])/segsize;
+		count += k;
+		for(j = 0; j < k; j++) {
+			segSeqIndxs.push_back(i);
+		}
+	}
+	
+	int fragCount = 0;
+	int lastSegIndx, fragIndx;
+	
+	for(i = 0; i < fragStartPos.size(); i++) {
+		long spos = fragStartPos[i];
+		long epos = fragEndPos[i];
+		int hapIndx = hapIndxs[i];
+		long fragSize = epos-spos+1;
+		int failCount = 0;
+		int n = seg->getReadCount(i);
+		while(n > 0) {
+			long pos = threadPool->randomInteger(spos, epos+1);
+			char* fragSeq;
+			if(!paired) {
+				fragSeq = getFragSequence(seg, hapIndx, pos, fragSize);
+			}
+			else {
+				int insertSize = profile.yieldInsertSize();
+				fragSeq = getFragSequence(seg, hapIndx, pos, insertSize);			
+			}
+			
+			if(fragSeq == NULL || strlen(fragSeq) < readLength) {
+				if(fragSeq != NULL) {
+					delete[] fragSeq;
+				}
+				failCount++;
+				if(failCount > 1000) {
+					break;
+				}
+				continue;
+			}			
+			fragCount++;
+			
+			if(!paired) {
+				k = threadPool->randomInteger(0, 2);
+				if(k == 0) {
+					char c = fragSeq[readLength];
+					fragSeq[readLength] = '\0';
+					results = profile.predict(fragSeq, 1);
+					fragSeq[readLength] = c;
+				}
+				else {
+					char* seq = &fragSeq[strlen(fragSeq)-readLength];
+					seq = getComplementSeq(seq);
+					reverse(seq, seq+readLength);
+					results = profile.predict(seq, 1);
+				}
+				k = 0;
+				sprintf(&buf[k], "@%s#%s#%ld#%d\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
+				k = strlen(buf);
+				seqLen = strlen(results)/2;
+				strncpy(&buf[k], &results[0], seqLen);
+				strcpy(&buf[k+seqLen], "\n+\n");
+				strncpy(&buf[k+seqLen+3], &results[seqLen], seqLen);
+				buf[k+2*seqLen+3] = '\n';
+				buf[k+2*seqLen+4] = '\0';
+				delete[] results;
+				
+				if(strlen(buf)+outIndx < bufferSize) {
+					strcpy(&outBuffer[outIndx], buf);
+					outIndx += strlen(buf);
+				}
+				else {
+					swp->write(outBuffer);
+					strcpy(outBuffer, buf);
+					outIndx = strlen(buf);
+				}
+				
+				n--;
+			}
+			else {
+				char c = fragSeq[readLength];
+				fragSeq[readLength] = '\0';
+				results = profile.predict(fragSeq, 1);
+				fragSeq[readLength] = c;
+				
+				k = 0;
+				sprintf(&buf1[k], "@%s#%s#%ld#%d/1\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
+				k = strlen(buf1);
+				seqLen = strlen(results)/2;
+				strncpy(&buf1[k], &results[0], seqLen);
+				strcpy(&buf1[k+seqLen], "\n+\n");
+				strncpy(&buf1[k+seqLen+3], &results[seqLen], seqLen);
+				buf1[k+2*seqLen+3] = '\n';
+				buf1[k+2*seqLen+4] = '\0';
+				delete[] results;
+				
+				char* seq = &fragSeq[strlen(fragSeq)-readLength];
+				seq = getComplementSeq(seq);
+				reverse(seq, seq+readLength);
+				results = profile.predict(seq, 0);
+				k = 0;
+				sprintf(&buf2[k], "@%s#%s#%ld#%d/2\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
+				k = strlen(buf2);
+				seqLen = strlen(results)/2;
+				strncpy(&buf2[k], &results[0], seqLen);
+				strcpy(&buf2[k+seqLen], "\n+\n");
+				strncpy(&buf2[k+seqLen+3], &results[seqLen], seqLen);
+				buf2[k+2*seqLen+3] = '\n';
+				buf2[k+2*seqLen+4] = '\0';
+				delete[] results;
+				
+				if(strlen(buf1)+outIndx1 < bufferSize && strlen(buf2)+outIndx2 < bufferSize) {
+					strcpy(&outBuffer1[outIndx1], buf1);
+					strcpy(&outBuffer2[outIndx2], buf2);
+					outIndx1 += strlen(buf1);
+					outIndx2 += strlen(buf2);
+				}
+				else {
+					swp->write(outBuffer1, outBuffer2);
+					strcpy(outBuffer1, buf1);
+					strcpy(outBuffer2, buf2);
+					outIndx1 = strlen(buf1);
+					outIndx2 = strlen(buf2);
+				}
+				
+				n -= 2;
+			}
+			
+			delete[] fragSeq;
+		}
+	}
+	
+	
+	if(paired) {
+		if(strlen(outBuffer1) > 0) {
+			swp->write(outBuffer1, outBuffer2);
+		}
+		delete[] outBuffer1;
+		delete[] outBuffer2;
+	}
+	else {
+		if(strlen(outBuffer) > 0) {
+			swp->write(outBuffer);
+		}
+		delete[] outBuffer;
+	}
+	
+	return NULL;
+}
+
+/*
 void* Segment::yieldReads(const void* args) {
 	Segment* seg = (Segment*) args;
 	if(seg->getSegSequences() == NULL || seg->getReadCount() == 0) {
@@ -672,200 +1046,6 @@ void* Segment::yieldReads(const void* args) {
 					strcpy(outBuffer2, buf2);
 					outIndx1 = strlen(buf1);
 					outIndx2 = strlen(buf2);
-				}
-				
-				n -= 2;
-			}
-			
-			delete[] fragSeq;
-		}
-	}
-	
-	
-	if(paired) {
-		if(strlen(outBuffer1) > 0) {
-			swp->write(outBuffer1, outBuffer2);
-		}
-		delete[] outBuffer1;
-		delete[] outBuffer2;
-	}
-	else {
-		if(strlen(outBuffer) > 0) {
-			swp->write(outBuffer);
-		}
-		delete[] outBuffer;
-	}
-	
-	return NULL;
-}
-
-/*
-void* Segment::yieldReads(const void* args) {
-	Segment* seg = (Segment*) args;
-	if(seg->getSegSequences() == NULL || seg->getReadCount() == 0) {
-		return NULL;
-	}
-
-	int segIndx = seg->getSegIndx();
-	string segChr = seg->getSegChr();
-	long segStartPos = seg->getSegStartPos();
-	long segEndPos = seg->getSegEndPos();
-	int CN = seg->getCN();
-	char** segSequences = seg->getSegSequences();
-	vector<long>& fragStartPos = seg->getFragStartPos();
-	vector<long>& fragEndPos = seg->getFragEndPos();
-
-	bool paired = config.isPairedEnd();
-	int readLength = config.getIntPara("readLength");
-	int ploidy = config.getIntPara("ploidy");
-	
-	//cerr << "Number of reads to sample on the segment: " << seg->getReadCount() << endl;
-	
-	unsigned long bufferSize = 50000000;
-	char buf[10000*readLength], buf1[10000*readLength], buf2[10000*readLength];
-	char results[10000*readLength];
-	char *outBuffer, *outBuffer1, *outBuffer2;
-	unsigned long outIndx = 0;
-	string outputDir = config.getStringPara("outputDir");
-	if(paired) {
-		outBuffer1 = new char[bufferSize];
-		outBuffer2 = new char[bufferSize];
-	}
-	else {
-		outBuffer = new char[bufferSize];
-	}
-	
-	int i, j, k;
-	
-	unsigned int refSize = seg->getRefSize();
-	unsigned int seqSize, segsize;
-	seqSize = seg->getSeqSize();
-	segsize = seqSize/CN;
-	
-	
-	vector<int> segSeqIndxs;
-	vector<int> cnStartCount;
-	int count = 0;
-	for(i = 0; i < ploidy; i++) {
-		cnStartCount.push_back(count);
-		if(segSequences[i] == NULL) {
-			continue;
-		}
-		k = strlen(segSequences[i])/segsize;
-		count += k;
-		for(j = 0; j < k; j++) {
-			segSeqIndxs.push_back(i);
-		}
-	}
-	
-	int fragCount = 0;
-	int lastSegIndx, fragIndx;
-	
-	for(i = 0; i < fragStartPos.size(); i++) {
-		long spos = fragStartPos[i];
-		long epos = fragEndPos[i];
-		long fragSize = epos-spos+1;
-		int failCount = 0;
-		int n = seg->getReadCount(i);
-		while(n > 0) {
-			long pos = threadPool->randomInteger(0, fragSize*CN);
-			k = pos/fragSize;
-			pos = pos%fragSize+spos;
-			j = segSeqIndxs[k];
-			pos += (k-cnStartCount[j])*segsize;
-			char* fragSeq;
-			if(!paired) {
-				fragSeq = getFragSequence(seg, j, pos, fragSize);
-			}
-			else {
-				int insertSize = profile.yieldInsertSize();
-				fragSeq = getFragSequence(seg, j, pos, insertSize);			
-			}
-			
-			if(fragSeq == NULL || strlen(fragSeq) < readLength) {
-				if(fragSeq != NULL) {
-					delete[] fragSeq;
-				}
-				failCount++;
-				if(failCount > 1000) {
-					break;
-				}
-				continue;
-			}			
-			fragCount++;
-			
-			if(!paired) {
-				k = threadPool->randomInteger(0, 2);
-				if(k == 0) {
-					char c = fragSeq[readLength];
-					fragSeq[readLength] = '\0';
-					profile.predict(fragSeq, results, 1, 1);
-					fragSeq[readLength] = c;
-				}
-				else {
-					char* seq = &fragSeq[strlen(fragSeq)-readLength];
-					seq = getComplementSeq(seq);
-					reverse(seq, seq+readLength);
-					profile.predict(seq, results, 1, 1);
-				}
-				k = 0;
-				sprintf(&buf[k], "@%s#%s#%ld#%d\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
-				k = strlen(buf);
-				strncpy(&buf[k], &results[0], readLength);
-				strcpy(&buf[k+readLength], "\n+\n");
-				strncpy(&buf[k+readLength+3], &results[readLength], readLength);
-				buf[k+2*readLength+3] = '\n';
-				buf[k+2*readLength+4] = '\0';
-				if(strlen(buf)+outIndx < bufferSize) {
-					strcpy(&outBuffer[outIndx], buf);
-					outIndx += strlen(buf);
-				}
-				else {
-					swp->write(outBuffer);
-					strcpy(outBuffer, buf);
-					outIndx = strlen(buf);
-				}
-				
-				n--;
-			}
-			else {
-				char c = fragSeq[readLength];
-				fragSeq[readLength] = '\0';
-				profile.predict(fragSeq, results, 1, 1);
-				fragSeq[readLength] = c;
-				
-				k = 0;
-				sprintf(&buf1[k], "@%s#%s#%ld#%d/1\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
-				k = strlen(buf1);
-				strncpy(&buf1[k], &results[0], readLength);
-				strcpy(&buf1[k+readLength], "\n+\n");
-				strncpy(&buf1[k+readLength+3], &results[readLength], readLength);
-				buf1[k+2*readLength+3] = '\n';
-				buf1[k+2*readLength+4] = '\0';
-				
-				char* seq = &fragSeq[strlen(fragSeq)-readLength];
-				seq = getComplementSeq(seq);
-				reverse(seq, seq+readLength);
-				profile.predict(seq, results, 1, 0);
-				k = 0;
-				sprintf(&buf2[k], "@%s#%s#%ld#%d/2\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
-				k = strlen(buf2);
-				strncpy(&buf2[k], &results[0], readLength);
-				strcpy(&buf2[k+readLength], "\n+\n");
-				strncpy(&buf2[k+readLength+3], &results[readLength], readLength);
-				buf2[k+2*readLength+3] = '\n';
-				buf2[k+2*readLength+4] = '\0';
-				
-				if(strlen(buf1)+outIndx < bufferSize) {
-					strcpy(&outBuffer1[outIndx], buf1);
-					strcpy(&outBuffer2[outIndx], buf2);
-					outIndx += strlen(buf1);
-				}
-				else {
-					swp->write(outBuffer1, outBuffer2);
-					strcpy(outBuffer1, buf1);
-					strcpy(outBuffer2, buf2);
-					outIndx = strlen(buf1);
 				}
 				
 				n -= 2;

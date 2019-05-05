@@ -20,8 +20,8 @@ void Genome::loadData() {
 	loadCNVs();
 	loadSNVs();
 	*/
-	loadSNPs(config.getStringPara("snp"), 1);
-	loadRefSeq(config.getStringPara("ref"));
+	loadSNPs();
+	loadRefSeq();
 	loadTargets(outTargets, config.getStringPara("target"));
 	divideTargets(outTargets);
 	loadAbundance();
@@ -29,13 +29,12 @@ void Genome::loadData() {
 	curChr = "nodefined";
 }
 
-void Genome::loadData(string vcfFile, string refFile, string targetFile) {
-	loadSNPs(vcfFile, 0);
-	loadRefSeq(refFile);
-	if(!targetFile.empty()) {
-		loadTargets(inTargets, targetFile);
-		divideTargets(inTargets);
-	}
+void Genome::loadTrainData() {
+	vcfParser.setVCF(config.getStringPara("vcf"));
+	vcfParser.parse();
+	loadRefSeq();
+	loadTargets(inTargets, config.getStringPara("target"));
+	divideTargets(inTargets);
 	curChr = "nodefined";
 }
 
@@ -45,11 +44,6 @@ void Genome::loadAbers() {
 		return;
 	}
 	vector<string>& popuNames = config.getPopuNames();
-	vector<string>::iterator v_it;
-	map<string, vector<CNV> >::iterator m1_it;
-	map<string, vector<SNV> >::iterator m2_it;
-	map<string, vector<Insert> >::iterator m3_it;
-	map<string, vector<Del> >::iterator m4_it;
 	
 	ifstream ifs;
 	ifs.open(aberFile.c_str());
@@ -57,6 +51,8 @@ void Genome::loadAbers() {
 		cerr << "can not open file " << aberFile << endl;
 		exit(-1);
 	}
+	
+	vector<string>::iterator v_it;
 	
 	string line;
 	int lineNum = 0;
@@ -85,31 +81,21 @@ void Genome::loadAbers() {
 				exit(1);
 			}
 			string chr = abbrOfChr(fields[2]);
-			CNV cnv;
-			cnv.spos = atol(fields[3].c_str());// 1-based
-			cnv.epos = atol(fields[4].c_str());// 1-based
-			cnv.CN = atof(fields[5].c_str());
-			cnv.mCN = atof(fields[6].c_str());
-			if(cnv.CN < cnv.mCN) {
+			long spos = atol(fields[3].c_str());// 1-based
+			long epos = atol(fields[4].c_str());// 1-based
+			float cn = atof(fields[5].c_str());
+			float mcn = atof(fields[6].c_str());
+			if(cn < mcn) {
 				cerr << "ERROR: total copy number should be not lower than major copy number at line " << lineNum << " in file " << aberFile << endl;
 				cerr << line << endl;
 				exit(1);
 			}
-			if(cnv.CN-cnv.mCN > cnv.mCN) {
-				cnv.mCN = cnv.CN-cnv.mCN;
+			if(cn-mcn > mcn) {
+				mcn = cn-mcn;
 			}
+			CNV cnv(spos, epos, cn, mcn);
 			PopuData<CNV>& cnvsOfPopu = cnvs[popuName];
-			for(m1_it = cnvsOfPopu.begin(); m1_it != cnvsOfPopu.end(); m1_it++) {
-				if((*m1_it).first.compare(chr) == 0) {
-					(*m1_it).second.push_back(cnv);
-					break;
-				}
-			}
-			if(m1_it == cnvsOfPopu.end()) {
-				vector<CNV> temp;
-				temp.push_back(cnv);
-				cnvsOfPopu.insert(make_pair(chr, temp));
-			}
+			cnvsOfPopu[chr].push_back(cnv);
 			cnvCount++;
 		}
 		//SNV
@@ -127,38 +113,29 @@ void Genome::loadAbers() {
 				exit(1);
 			}
 			string chr = abbrOfChr(fields[2]);
-			SNV snv;
-			snv.pos = atol(fields[3].c_str());// 1-based
-			snv.ref = fields[4].at(0);
-			snv.alt = fields[5].at(0);
-			if(snv.ref == snv.alt) {
+			long pos = atol(fields[3].c_str());// 1-based
+			char ref = fields[4].at(0);
+			char alt = fields[5].at(0);
+			if(ref == alt) {
 				cerr << "ERROR: the mutated allele should be not same as the reference allele at line " << lineNum << " in file " << aberFile << endl;
 				cerr << line << endl;
 				exit(1);
 			}
-			snv.type = fields[6];
-			if(snv.type.compare("homo") != 0 && snv.type.compare("het") != 0) {
+			string typeCode = fields[6];
+			if(typeCode.compare("homo") != 0 && typeCode.compare("het") != 0) {
 				cerr << "ERROR: unrecognized SNV type at line " << lineNum << " in file " << aberFile << endl;
 				cerr << line << endl;
 				exit(1);
 			}
+			varType type = (typeCode.compare("het") == 0)? het : homo;
+			SNV snv(pos, ref, alt, type);
 			PopuData<SNV>& snvsOfPopu = snvs[popuName];
-			for(m2_it = snvsOfPopu.begin(); m2_it != snvsOfPopu.end(); m2_it++) {
-				if((*m2_it).first.compare(chr) == 0) {
-					(*m2_it).second.push_back(snv);
-					break;
-				}
-			}
-			if(m2_it == snvsOfPopu.end()) {
-				vector<SNV> temp;
-				temp.push_back(snv);
-				snvsOfPopu.insert(make_pair(chr, temp));
-			}
+			snvsOfPopu[chr].push_back(snv);
 			snvCount++;
 		}
 		//Insert
 		else if(aberType.compare("i") == 0) {
-			if(fields.size() != 5) {
+			if(fields.size() != 6) {
 				cerr << "ERROR: line " << lineNum << " has wrong number of fields in file " << aberFile << endl;
 				cerr << line << endl;
 				exit(1);
@@ -171,26 +148,23 @@ void Genome::loadAbers() {
 				exit(1);
 			}
 			string chr = abbrOfChr(fields[2]);
-			Insert insert;
-			insert.pos = atol(fields[3].c_str());// 1-based
-			insert.seq = fields[4];
+			long pos = atol(fields[3].c_str());// 1-based
+			string seq = fields[4];
+			string typeCode = fields[5];
+			if(typeCode.compare("homo") != 0 && typeCode.compare("het") != 0) {
+				cerr << "ERROR: unrecognized insert type at line " << lineNum << " in file " << aberFile << endl;
+				cerr << line << endl;
+				exit(1);
+			}
+			varType type = (typeCode.compare("het") == 0)? het : homo;
+			Insert insert(pos, seq, type);
 			PopuData<Insert>& insertsOfPopu = inserts[popuName];
-			for(m3_it = insertsOfPopu.begin(); m3_it != insertsOfPopu.end(); m3_it++) {
-				if((*m3_it).first.compare(chr) == 0) {
-					(*m3_it).second.push_back(insert);
-					break;
-				}
-			}
-			if(m3_it == insertsOfPopu.end()) {
-				vector<Insert> temp;
-				temp.push_back(insert);
-				insertsOfPopu.insert(make_pair(chr, temp));
-			}
+			insertsOfPopu[chr].push_back(insert);
 			insertCount++;
 		}
-		//Del
+		//Deletion
 		else if(aberType.compare("d") == 0) {
-			if(fields.size() != 5) {
+			if(fields.size() != 6) {
 				cerr << "ERROR: line " << lineNum << " has wrong number of fields in file " << aberFile << endl;
 				cerr << line << endl;
 				exit(1);
@@ -203,21 +177,18 @@ void Genome::loadAbers() {
 				exit(1);
 			}
 			string chr = abbrOfChr(fields[2]);
-			Del del;
-			del.pos = atol(fields[3].c_str());// 1-based
-			del.len = atoi(fields[4].c_str());
-			PopuData<Del>& delsOfPopu = dels[popuName];
-			for(m4_it = delsOfPopu.begin(); m4_it != delsOfPopu.end(); m4_it++) {
-				if((*m4_it).first.compare(chr) == 0) {
-					(*m4_it).second.push_back(del);
-					break;
-				}
+			long pos = atol(fields[3].c_str());// 1-based
+			int length = atoi(fields[4].c_str());
+			string typeCode = fields[5];
+			if(typeCode.compare("homo") != 0 && typeCode.compare("het") != 0) {
+				cerr << "ERROR: unrecognized deletion type at line " << lineNum << " in file " << aberFile << endl;
+				cerr << line << endl;
+				exit(1);
 			}
-			if(m4_it == delsOfPopu.end()) {
-				vector<Del> temp;
-				temp.push_back(del);
-				delsOfPopu.insert(make_pair(chr, temp));
-			}
+			varType type = (typeCode.compare("het") == 0)? het : homo;
+			Deletion del(pos, length, type);
+			PopuData<Deletion>& delsOfPopu = dels[popuName];
+			delsOfPopu[chr].push_back(del);
 			delCount++;
 		}
 		else {
@@ -231,24 +202,20 @@ void Genome::loadAbers() {
 	cerr << "CNV: " << cnvCount << endl;
 	cerr << "SNV: " << snvCount << endl;
 	cerr << "Insert: " << insertCount << endl;
-	cerr << "Del: " << delCount << endl;
+	cerr << "Deletion: " << delCount << endl;
 }
 
-void Genome::loadSNPs(string snpFile, int n) {
-	if(n == 0) {
-		scReal.readSNPsFromVCF(snpFile);
-		cerr << "\n" << scReal.SNPNumber() << " filtered germline SNPs were loaded from file " << snpFile << endl;
+void Genome::loadSNPs() {
+	string snpFile = config.getStringPara("snp");
+	if(snpFile.empty()) {
+		return;
 	}
-	else {
-		if(snpFile.empty()) {
-			return;
-		}
-		scSim.readSNPs(snpFile);
-		cerr << "\n" << scSim.SNPNumber() << " SNPs to simulate were loaded from file " << snpFile << endl;
-	}
+	sc.readSNPs(snpFile);
+	cerr << "\n" << sc.SNPNumber() << " SNPs to simulate were loaded from file " << snpFile << endl;
 }
 
-void Genome::loadRefSeq(string refFile) {
+void Genome::loadRefSeq() {
+	string refFile = config.getStringPara("ref");
 	string tmp = refFile;
 	if(tmp.empty()) {
 		cerr << "genome sequence file not specified!" << endl;
@@ -389,23 +356,23 @@ void Genome::generateAltSequence() {
 }
 */
 
-vector<CNV>& Genome::getCNVs(string popu, string chr) {
+vector<CNV>& Genome::getSimuCNVs(string popu, string chr) {
 	PopuData<CNV>& cnvsOfPopu = cnvs[popu];
 	return cnvsOfPopu[chr];
 }
 
-vector<SNV>& Genome::getSNVs(string popu, string chr) {
+vector<SNV>& Genome::getSimuSNVs(string popu, string chr) {
 	PopuData<SNV>& snvsOfPopu = snvs[popu];
 	return snvsOfPopu[chr];
 }
 
-vector<Insert>& Genome::getInserts(string popu, string chr) {
+vector<Insert>& Genome::getSimuInserts(string popu, string chr) {
 	PopuData<Insert>& insertsOfPopu = inserts[popu];
 	return insertsOfPopu[chr];
 }
 
-vector<Del>& Genome::getDels(string popu, string chr) {
-	PopuData<Del>& delsOfPopu = dels[popu];
+vector<Deletion>& Genome::getSimuDels(string popu, string chr) {
+	PopuData<Deletion>& delsOfPopu = dels[popu];
 	return delsOfPopu[chr];
 }
 
@@ -461,6 +428,109 @@ char* Genome::getSubSequence(string chr, int startPos, int length) {
 	return s;
 }
 
+char* Genome::getSubRefSequence(string chr, int startPos, int length) {
+	if(curChr.compare(chr) != 0) {
+		generateChrSequence(chr);
+	}
+	string seq = refSequence.substr(startPos, length);
+	char* s = new char[seq.length()+1];
+	strcpy(s, seq.c_str());
+	return s;
+}
+
+char* Genome::getSubAltSequence(string chr, int startPos, int length) {
+	if(curChr.compare(chr) != 0) {
+		generateChrSequence(chr);
+	}
+	//string seq = altSequence[chr].substr(startPos, length);
+	string seq = altSequence.substr(startPos, length);
+	char* s = new char[seq.length()+1];
+	strcpy(s, seq.c_str());
+	return s;
+}
+
+void Genome::generateChrSequence(string chr) {	
+	unsigned int i, j;
+	vector<string>::iterator it = find(chromosomes.begin(), chromosomes.end(), chr);
+	if(it == chromosomes.end()) {
+		cerr << "ERROR: unrecognized chromosome identifier \"" << chr 
+			 << "\" when generating alternative sequence!" << endl;
+		exit(1);
+	}
+	
+	curChr = chr;
+	vector<SNV>& snvsOfChr = getRealSNVs(chr);
+	vector<Insert>& insertsOfChr = getRealInserts(chr);
+	vector<Deletion>& delsOfChr = getRealDels(chr);
+	
+	refSequence = fr.getSubSequence(chr, 0, getChromLen(chr));
+	altSequence = refSequence;
+	for(j = 0; j < snvsOfChr.size(); j++) {
+		SNV snv = snvsOfChr[j];
+		long pos = snv.getPosition();
+		altSequence[pos-1] = snv.getAlt();
+		if(snv.getType() == homo) {
+			refSequence[pos-1] = snv.getAlt();
+		}
+	}
+	/*
+	map<int, map<long, int> > insertsPerhaploidy;
+	map<long, int>::iterator m_it;
+	int insertLens[] = {0, 0};
+	for(j = 0; j < insertsOfChr.size(); j++) {
+		Insert insert = insertsOfChr[j];
+		long pos = insert.getPosition();
+		string seq = insert.getSequence();
+		altSequence.insert(pos+insertLens[1], seq);
+		insertLens[1] += seq.length();
+		insertsPerhaploidy[1].insert(make_pair(pos, seq.length()));
+		if(insert.getType() == homo) {
+			refSequence.insert(pos+insertLens[0], seq);
+			insertLens[0] += seq.length();
+			insertsPerhaploidy[0].insert(make_pair(pos, seq.length()));
+		}
+	}
+	
+	int delLens[] = {0, 0};
+	int offset;
+	for(j = 0; j < delsOfChr.size(); j++) {
+		Deletion del = delsOfChr[j];
+		long pos = del.getPosition();
+		int length = del.getLength();
+		
+		offset = 0;
+		map<long, int>& insertedSeq = insertsPerhaploidy[1];
+		for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
+			if((*m_it).first <= pos) {
+				offset += (*m_it).second;
+			}
+		}
+		offset -= delLens[1];
+		if(pos-1+offset >= 0) {
+			altSequence.erase(pos-1+offset, length);
+			delLens[1] += length;
+		}
+		if(del.getType() == homo) {
+			offset = 0;
+			map<long, int>& insertedSeq = insertsPerhaploidy[0];
+			for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
+				if((*m_it).first <= pos) {
+					offset += (*m_it).second;
+				}
+			}
+			offset -= delLens[0];
+			if(pos-1+offset >= 0) {
+				refSequence.erase(pos-1+offset, length);
+				delLens[0] += length;
+			}
+		}
+	}
+	*/
+	transform(refSequence.begin(), refSequence.end(), refSequence.begin(), (int (*)(int))toupper);
+	transform(altSequence.begin(), altSequence.end(), altSequence.begin(), (int (*)(int))toupper);
+}
+
+/*
 void Genome::generateAltSequence(string chr) {	
 	int i, j;
 	vector<string>::iterator it = find(chromosomes.begin(), chromosomes.end(), chr);
@@ -480,19 +550,7 @@ void Genome::generateAltSequence(string chr) {
 	}
 	transform(altSequence.begin(), altSequence.end(), altSequence.begin(), (int (*)(int))toupper);
 }
-
-
-char* Genome::getSubAltSequence(string chr, int startPos, int length) {
-	if(curChr.compare(chr) != 0) {
-		generateAltSequence(chr);
-	}
-	//string seq = altSequence[chr].substr(startPos, length);
-	string seq = altSequence.substr(startPos, length);
-	char* s = new char[seq.length()+1];
-	strcpy(s, seq.c_str());
-	return s;
-}
-
+*/
 
 int Genome::getSegReadCount(string popu, string chr, int segIndx) {
 	PopuData<Segment>& segsOfPopu = segments[popu];
@@ -599,7 +657,7 @@ void Genome::generateSegments() {
 		for(j = 0; j < chromosomes.size(); j++) {
 			string chr = chromosomes[j];
 			int segIndx = 0;
-			vector<CNV>& cnvsOfChr = getCNVs(popu, chr);
+			vector<CNV>& cnvsOfChr = getSimuCNVs(popu, chr);
 			long segStartPos = 1, segEndPos = -1;
 			
 			for(k = 0; k < cnvsOfChr.size(); k++) {		
@@ -796,7 +854,7 @@ void Genome::yieldReads() {
 	if(mixProps.empty()) {
 		curPopu = popuNames[0];
 		
-		string fqFilePrefix = config.getStringPara("outputDir")+"/";
+		string fqFilePrefix = config.getStringPara("output")+"/";
 		if(config.isPairedEnd()) {
 			string outFile1 = fqFilePrefix+popuNames[0]+"_1.fq";
 			string outFile2 = fqFilePrefix+popuNames[0]+"_2.fq";

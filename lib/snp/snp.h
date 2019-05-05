@@ -15,7 +15,10 @@
 
 using namespace std;
 
-enum snp_status{heter, homo, unknow};
+#ifndef _VARTYPE_
+#define _VARTYPE_
+enum varType{het, homo, unknown};
+#endif
 
 class SNP {
 
@@ -32,9 +35,9 @@ class SNP {
         char getNucleotide();
         float getFrequency();
 		char getComplement(char nucleotide);
-        snp_status getStatus();
+        varType getType();
         void setFrequency(float value);
-        void setStatus(snp_status status);
+        void setType(varType type);
 	private:
 		string name;
 		//string chromosome;
@@ -44,7 +47,7 @@ class SNP {
 		char ref;
 		char nucleotide;
 		float frequency;
-		snp_status status;
+		varType type;
 };
 
 class SNPOnChr : public map<string, vector<SNP> > {

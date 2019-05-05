@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	genome.loadData();
 
 	/*** create output directory ***/
-	string outputDir = config.getStringPara("outputDir");
+	string outputDir = config.getStringPara("output");
 	string cmd = "test ! -e "+outputDir+" && mkdir -m 755 -p "+outputDir;
 	system(cmd.c_str());
 	

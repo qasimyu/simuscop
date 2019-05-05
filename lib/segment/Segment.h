@@ -38,10 +38,15 @@ class Segment {
 
 		//map<long, double> fragWeights;
 		//map<long, long> fragRCs;
+		//vector<long> fragStartPos;
+		//vector<long> fragEndPos;
+		//vector<long> fragRCs;
+		//vector<double> fragWeights;
 		vector<long> fragStartPos;
 		vector<long> fragEndPos;
-		vector<long> fragRCs;
+		vector<int> fragRCs;
 		vector<double> fragWeights;
+		vector<int> hapIndxs;
 
 		void initTargets();
 		
@@ -70,7 +75,8 @@ class Segment {
 		
 		vector<long>& getFragStartPos() {return fragStartPos;}
 		vector<long>& getFragEndPos() {return fragEndPos;}
-		vector<long>& getFragRCs() {return fragRCs;}
+		vector<int>& getFragRCs() {return fragRCs;}
+		vector<int>& getHapIndxs() {return hapIndxs;}
 
 		unsigned int getSeqSize();
 		unsigned int getRefSize() {return segEndPos-segStartPos+1;}

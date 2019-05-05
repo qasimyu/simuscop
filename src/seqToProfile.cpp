@@ -21,8 +21,8 @@ int main(int argc, char *argv[]) {
 	string vcfFile = "", refFile = "";
 	string outFile = "", samtools = "";
 	
-	int kmer = 3;
 	int binCount = 50;
+	int kmer = 3;
 
 	/*** record elapsed time ***/
 	time_t start_t, end_t;
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 
 	int c;
 	//Parse command line parameters
-	while((c = getopt_long(argc, argv, "hb:t:v:r:o:s:k:B:T:", long_options, NULL)) != -1){
+	while((c = getopt_long(argc, argv, "hb:t:v:r:o:s:k:B:", long_options, NULL)) != -1){
 		switch(c){
 			case 'h':
 				usage(argv[0]);
@@ -115,6 +115,7 @@ int main(int argc, char *argv[]) {
 		cerr << "Error: parameter \"kmer\" should be a positive integer with maximum value of 5!" << endl;
 		exit(1);
 	}
+	
 	if(binCount < 10) {
 		cerr << "Error: parameter \"bins\" should be a positive integer with minimum value of 10!" << endl;
 		exit(1);
@@ -122,13 +123,19 @@ int main(int argc, char *argv[]) {
 	
 	config.setIntPara("kmer", kmer);
 	config.setIntPara("bins", binCount);
+	config.setStringPara("bam", bamFile);
+	config.setStringPara("samtools", samtools);
+	config.setStringPara("output", outFile);
+	config.setStringPara("vcf", vcfFile);
+	config.setStringPara("target", targetFile);
+	config.setStringPara("ref", refFile);
 	
-	/*** create genome data ***/
-	genome.loadData(vcfFile, refFile, targetFile);
+	/*** load data ***/
+	genome.loadTrainData();
 
 	/*** profile learning ***/
 	profile.init();
-	profile.train(bamFile, samtools, outFile);
+	profile.train();
 	
 	end_t = time(NULL);
 	time_used = end_t-start_t;
@@ -155,7 +162,7 @@ void usage(const char* app) {
 		<< "    -B, --bins <int>                the number of bins into which bases of read are grouped [default:50]" << endl
 		<< endl
 		<< "Example:" << endl
-		<< "    " << app << " -b /path/to/normal.bam -t /path/to/normal.bed -v /path/to/normal.vcf -r /path/to/ref.fa -k 4 -B 100 > /path/to/results.model" << endl
+		<< "    " << app << " -b /path/to/normal.bam -t /path/to/normal.bed -v /path/to/normal.vcf -r /path/to/ref.fa -k 4 > /path/to/results.model" << endl
 		<< endl
 		<< "    " << app << " -b /path/to/normal.bam -v /path/to/normal.vcf -r /path/to/ref.fa -o /path/to/results.model -s /path/to/samtools" << endl
 		<< endl

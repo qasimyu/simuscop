@@ -7,6 +7,10 @@ include_directories(matrix)
 include_directories(snp)
 add_library(snp snp/snp.cpp)
 
+# Build the vcfparser library
+include_directories(vcfparser)
+add_library(vcfparser vcfparser/vcfparser.cpp)
+
 # Build the split library
 include_directories(split)
 add_library(split split/split.cpp)
@@ -37,7 +41,7 @@ target_link_libraries(fastahack split)
 # Build the genome library
 include_directories(genome)
 add_library(genome genome/Genome.cpp)
-target_link_libraries(genome segment fastahack snp split mydefine)
+target_link_libraries(genome segment fastahack snp vcfparser split mydefine)
 
 # Build the profile library
 include_directories(profile)

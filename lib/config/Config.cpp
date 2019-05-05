@@ -13,8 +13,8 @@
 
 Config::Config() {
 	configFile = "";
-	string strParaNames[] = {"profile", "ref", "variation", "snp", "target",
-							"bases", "outputDir", "abundance", "layout"};
+	string strParaNames[] = {"bam", "profile", "ref", "variation", "snp", "vcf", "target",
+							"bases", "output", "abundance", "layout", "samtools"};
 	
 	/*---start default configuration---*/
 	
@@ -123,7 +123,7 @@ void Config::checkParas() {
 		cerr << "Error: abundance file not specified!" << endl;
 		exit(1);
 	}
-	if(stringParas["outputDir"].empty()) {
+	if(stringParas["output"].empty()) {
 		cerr << "Error: output directory not specified!" << endl;
 		exit(1);
 	}
@@ -143,10 +143,12 @@ void Config::checkParas() {
 		cerr << "Error: number of threads should be a positive integer!" << endl;
 		exit(1);
 	}
+	/*
 	if(intParas["readLength"] < 1 || intParas["readLength"] > 100000) {
 		cerr << "Error: read length should be a positive integer with maximum value of 100000!" << endl;
 		exit(1);
 	}
+	*/
 	if(intParas["coverage"] < 1) {
 		cerr << "Error: sequence coverage should be a positive integer!" << endl;
 		exit(1);

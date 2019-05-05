@@ -24,6 +24,7 @@ Profile::Profile() {
 	subsDist1 = subsDist2 = NULL;
 	subsCdf1 = subsCdf2 = NULL;
 	qualityDist = qualityCdf = NULL;
+	baseCount = 0;
 }
 
 Profile::~Profile() {
@@ -122,13 +123,69 @@ void Profile::initKmers() {
 	delete[] tmp;
 }
 
+void Profile::setReadLength() {
+	if(config.getIntPara("readLength") > 0) {
+		return;
+	}
+	string bamFile = config.getStringPara("bam");
+	string samtools = config.getStringPara("samtools");
+	if(samtools.empty()) {
+		samtools = "samtools";
+	}
+	string cmd = samtools + " view -F 0xD04 -q 20 " + bamFile;
+	FILE* fp = popen(cmd.c_str(), "r");
+	if(!fp) {
+		cerr << "cannot open BAM file " << bamFile << endl;
+		exit(-1);
+    }
+	
+	int i, n;
+	char buf[2500000];
+	char* elems[20];
+	char* cigar;
+	while(fgets(buf , 2500000 , fp)) {
+		buf[strlen(buf)-1] = '\0';
+		i = split(buf, '\t', elems);
+		if(i < 11) {
+			cerr << "Error: malformed read " <<
+					", there should be 11 mandatory fields" << endl;
+			cerr << buf << endl;
+			exit(1);
+		}
+		cigar = elems[5];
+		n = strlen(cigar);
+		for(i = 0; i < n-1; i++) {
+			if(!(cigar[i] >= '0' && cigar[i] <= '9')) {
+				break;
+			}
+		}
+		if(i == n-1 && cigar[i] == 'M') {
+			break;
+		}
+	}
+	fclose(fp);
+	
+	cigar[n-1] = '\0';
+	config.setIntPara("readLength", atoi(cigar));
+}
+
 void Profile::init() {
 	minBaseQuality = 33;
 	maxBaseQuality = 126;
 	
-	indelRate = config.getRealPara("indelRate");
+	//indelRate = config.getRealPara("indelRate");
 	
+	insertRate = 0;
+	insFreqs.resize(1, 1, true);
+	delRate = 0;
+	delFreqs.resize(1, 1, true);
+	
+	setReadLength();
 	int binCount = config.getIntPara("bins");
+	if(binCount > config.getIntPara("readLength")) {
+		binCount = config.getIntPara("readLength");
+		config.setIntPara("bins", binCount);
+	}
 	
 	initKmers();
 	
@@ -156,7 +213,7 @@ void Profile::init() {
 		qualityDist[i] = tmp1;
 	}
 	
-	iSizeDist.resize(1, 1000, true);
+	iSizeDist.resize(1, 10, true);
 	stdISize = 0;
 }
 
@@ -217,29 +274,114 @@ int Profile::processRead(char* read) {
 		return 0;
 	}
 	
-	/***update read counts distribution associated with GC-content***/
+	if(strcmp(readSeq, "*") == 0) {
+		return 0;
+	}
 	
+	/***update read counts distribution associated with GC-content***/
 	i = countGC(chr, position);
 	if(i == 0) {
 		return 0;	
 	}
 	
+	vector<Insert>& insertsOfChr = genome.getRealInserts(chr);
+	vector<Deletion>& delsOfChr = genome.getRealDels(chr);
 	
 	n = strlen(cigar);
-	for(i = 0; i < n-1; i++) {
-		if(!(cigar[i] >= '0' && cigar[i] <= '9')) {
-			break;
+	int sIndx = 0;
+	int refIndx = 0;
+	long pos;
+	baseCount += n;
+	for(i = 0, k = 0; i < n; i++) {
+		if(cigar[i] >= '0' && cigar[i] <= '9') {
+			k++;
+			continue;
+		}
+		if(cigar[i] == 'H') {
+			baseCount -= n;
+			return 0;
+		}
+		if(cigar[i] == 'S') {
+			sIndx = i+1;
+		}
+		else if(cigar[i] == 'I') { //insert
+			cigar[i] = '\0';
+			int insertLen = atoi(&cigar[sIndx]);
+			cigar[i] = 'I';
+			pos = position+refIndx-1;
+			int found = 0;
+			for(j = 0; j < insertsOfChr.size(); j++) {
+				if(insertsOfChr[j].getPosition() > pos) {
+					break;
+				}
+				if(insertsOfChr[j].getPosition() == pos && insertLen == insertsOfChr[j].getLength()) {
+					found = 1;
+					break;
+				}
+			}
+			if(!found) {
+				if(insertLen > insFreqs.getCOLS()-1) {
+					insFreqs.resize(1, insertLen+1, true);
+				}
+				insFreqs.set(0, insertLen, insFreqs.get(0, insertLen)+1);
+				insertRate++;
+				/*
+				cerr << insertLen << "I\t" << position << ", " << refIndx << endl;
+				cerr << "cigar: " << cigar << endl;
+				cerr << "reads: " << readSeq << endl;
+				cerr << "refse: " << refSeq << endl;
+				*/
+			}
+			sIndx = i+1;
+		}
+		else if(cigar[i] == 'D') { //deletion
+			cigar[i] = '\0';
+			int delLen = atoi(&cigar[sIndx]);
+			cigar[i] = 'D';
+			pos = position+refIndx;
+			int found = 0;
+			for(j = 0; j < delsOfChr.size(); j++) {
+				if(delsOfChr[j].getPosition() > pos) {
+					break;
+				}
+				if(delsOfChr[j].getPosition() == pos && delLen == delsOfChr[j].getLength()) {
+					found = 1;
+					break;
+				}
+			}
+			if(!found) {
+				if(delLen > delFreqs.getCOLS()-1) {
+					delFreqs.resize(1, delLen+1, true);
+				}
+				delFreqs.set(0, delLen, delFreqs.get(0, delLen)+1);
+				delRate++;
+				/*
+				cerr << delLen << "D\t" << position << ", " << refIndx << endl;
+				cerr << "cigar: " << cigar << endl;
+				cerr << "reads: " << readSeq << endl;
+				cerr << "refse: " << refSeq << endl;
+				*/
+			}
+			refIndx += delLen;
+			sIndx = i+1;
+		}
+		else if(cigar[i] == 'M') {
+			cigar[i] = '\0';
+			int matchLen = atoi(&cigar[sIndx]);
+			cigar[i] = 'M';
+			refIndx += matchLen;
+			sIndx = i+1;
+		}
+		else {
+			sIndx = i+1;
 		}
 	}
-	if(i < n-1 || cigar[i] != 'M') {
+	
+	if(k != n-1 || cigar[n-1] != 'M') {
 		return 0;
 	}
 	
-	if(strcmp(readSeq, "*") == 0) {
-		return 0;
-	}
-	
-	char* refSeq = genome.getSubSequence(chr, position-1, strlen(readSeq));
+	char* refSeq = genome.getSubRefSequence(chr, position-1, strlen(readSeq));
 	char* altSeq = genome.getSubAltSequence(chr, position-1, strlen(readSeq));
 	
 	int isRead1 = 1;
@@ -252,10 +394,10 @@ int Profile::processRead(char* read) {
 		readSeq = Segment::getComplementSeq(readSeq);
 		reverse(baseQuality, baseQuality+strlen(baseQuality));
 		isRead1 = 0;
-	}	
+	}
 	
 	/***update subsDist***/
-	int kmerIndx, refIndx, baseIndx, binIndx;
+	int kmerIndx, baseIndx, binIndx;
 	static int kmer = config.getIntPara("kmer");
 	n = strlen(refSeq);
 	
@@ -389,7 +531,7 @@ int Profile::countGC(string chr, long position) {
 	int i, k;
 	if(chr.compare("X") == 0 || chr.compare("Y") == 0 || chr.compare("M") == 0)
 	{
-		return -1;
+		return 0;
 	}
 	/*
 	for(i = 0; i < chr.length(); i++) {
@@ -433,7 +575,7 @@ int Profile::countGC(string chr, long position) {
 			}
 			rightPos = min(rightPos, refLen-1);
 			leftPos = rightPos-winSize+1;
-			refSeq = genome.getSubSequence(chr, leftPos, winSize);
+			refSeq = genome.getSubRefSequence(chr, leftPos, winSize);
 			rc = 1;
 		}
 		else {
@@ -448,7 +590,7 @@ int Profile::countGC(string chr, long position) {
 				if(targets[targetIndx].epos <= refLen) {
 					rightPos = targets[targetIndx].epos-1;
 					leftPos = targets[targetIndx].spos;
-					refSeq = genome.getSubSequence(chr, leftPos, rightPos-leftPos+1);
+					refSeq = genome.getSubRefSequence(chr, leftPos, rightPos-leftPos+1);
 					if(leftPos <= position) {
 						rc = 1;		
 					}
@@ -513,7 +655,7 @@ int Profile::countGC(string chr, long position) {
 				}
 				rightPos = min(rightPos, refLen-1);
 				leftPos = rightPos-winSize+1;
-				refSeq = genome.getSubSequence(chr, leftPos, winSize);
+				refSeq = genome.getSubRefSequence(chr, leftPos, winSize);
 				rc = 1;
 			}
 			else {
@@ -527,7 +669,7 @@ int Profile::countGC(string chr, long position) {
 					if(targets[targetIndx].epos <= refLen) {
 						rightPos = targets[targetIndx].epos-1;
 						leftPos = targets[targetIndx].spos;
-						refSeq = genome.getSubSequence(chr, leftPos, rightPos-leftPos+1);
+						refSeq = genome.getSubRefSequence(chr, leftPos, rightPos-leftPos+1);
 						if(leftPos <= position) {
 							rc = 1;		
 						}
@@ -568,7 +710,7 @@ void Profile::initGCParas() {
 	gcStd = 1.0e-5;
 }
 
-void Profile::estimateGCParas(string outFile) {
+void Profile::estimateGCParas() {
 	int i, j, k;
 	
 	int bins = 50;
@@ -585,6 +727,7 @@ void Profile::estimateGCParas(string outFile) {
 	}
 	delete[] counts;
 	
+	string outFile = config.getStringPara("output");
 	outFile = outFile + ".gc";
 	ofstream ofs;
 	ofs.open(outFile.c_str());
@@ -684,7 +827,7 @@ void Profile::estimateGCParas(string outFile) {
 		gcStd += pow(readCounts[j]-gcMeans[k], 2);
 	}
 	gcStd = sqrt(gcStd/indxs.size());
-	cerr << "read counts std: " << gcStd << endl;
+	cerr << "\nread counts std: " << gcStd << endl;
 	
 	gcs.clear();
 	readCounts.clear();
@@ -697,6 +840,7 @@ void Profile::normParas(bool isLoaded) {
 	int kmer = config.getIntPara("kmer");
 	int binCount = config.getIntPara("bins");
 	/***normalize probability matrix***/
+	
 	kmersDist.normalize(0);
 	for(i = 0; i < kmerCount; i++) {
 		subsDist1[i].normalize(0);
@@ -737,16 +881,22 @@ void Profile::normParas(bool isLoaded) {
 
 		iSizeDist.normalize(0);
 		double meanTlen = 0;
-		for(i = 0; i < iSizeDist.getCOLS(); i++) {
+		for(i = 0; i < j*5; i++) {
 			meanTlen += iSizeDist.get(0, i)*i;
 		}
 		stdISize = 0;
-		for(i = 0; i < iSizeDist.getCOLS(); i++) {
+		for(i = 0; i < j*5; i++) {
 			stdISize += iSizeDist.get(0, i)*pow(i-meanTlen, 2);
 		}
 		stdISize = sqrt(stdISize);
 		//cerr << "stdISize: " << stdISize << endl;
 		//iSizeDist.clear();
+		
+		insFreqs.normalize(0);
+		delFreqs.normalize(0);
+		insertRate /= baseCount;
+		delRate /= baseCount;
+		cerr << "insert rate: " << insertRate << ", deletion rate: " << delRate << endl;
 	}
 	else {
 		baseAlphabet.resize(1, N, false);
@@ -795,6 +945,7 @@ void Profile::load(string proFile) {
 	string bases = "";
 	int binCount = -1;
 	int kmer = -1;
+	int readLength = -1;
 	
 	string errMsg = "Error: malformed model file "+proFile+" @line ";
 	
@@ -826,15 +977,22 @@ void Profile::load(string proFile) {
 				exit(1);
 			}
 		}
+		else if(trim(fields[0]).compare("readLength") == 0) {
+			readLength = atoi(trim(fields[1]).c_str());
+			if(readLength <= 0) {
+				cerr << errMsg << lineNum << "\n" << line;
+				exit(1);
+			}
+		}
 		else {
 			cerr << errMsg << lineNum << "\n" << line;
 			exit(1);
 		}
-		if(!bases.empty() && binCount > 0 && kmer > 0) {
+		if(!bases.empty() && binCount > 0 && kmer > 0 && readLength > 0) {
 			break;
 		}
 	}
-	if(bases.empty() || binCount <= 0 || kmer <= 0) {
+	if(bases.empty() || binCount <= 0 || kmer <= 0 || readLength <= 0) {
 		cerr << "Error: malformed model file " << proFile << endl;
 		exit(1);
 	}
@@ -842,6 +1000,7 @@ void Profile::load(string proFile) {
 	config.setStringPara("bases", bases);
 	config.setIntPara("kmer", kmer);
 	config.setIntPara("bins", binCount);
+	config.setIntPara("readLength", readLength);
 	
 	init();
 
@@ -852,6 +1011,7 @@ void Profile::load(string proFile) {
 	int paraLoadedCount = 0;
 	vector<string> fields;
 	while(getNextLine(ifs, line, lineNum)) {
+		/*
 		if(line.compare("[Kmer Distribution]") == 0) {
 			for(j = 0; j < binCount; j++) {
 				if(getNextLine(ifs, line, lineNum)) {
@@ -869,6 +1029,63 @@ void Profile::load(string proFile) {
 					cerr << "Error: malformed profile file " << proFile << endl;
 					exit(1);
 				}
+			}
+			paraLoadedCount++;
+		}
+		*/
+		if(line.compare("[Insert Rate]") == 0) {
+			if(getNextLine(ifs, line, lineNum)) {
+				insertRate = atof(trim(line).c_str());
+			}
+			else {
+				cerr << "Error: malformed profile file " << proFile << endl;
+				exit(1);
+			}
+			paraLoadedCount++;
+		}
+		else if(line.compare("[Insert Frequency]") == 0) {
+			if(getNextLine(ifs, line, lineNum)) {
+				fields = split(line, '\t');
+				if(fields.size() < 1) {
+					cerr << errMsg << lineNum << "\n" << line << endl;
+					exit(1);
+				}
+				insFreqs.resize(1, fields.size(), false);
+				for(j = 0; j < fields.size(); j++) {
+					insFreqs.set(0, j, atof(trim(fields[j]).c_str()));
+				}
+			}
+			else {
+				cerr << "Error: malformed profile file " << proFile << endl;
+				exit(1);
+			}
+			paraLoadedCount++;
+		}
+		else if(line.compare("[Deletion Rate]") == 0) {
+			if(getNextLine(ifs, line, lineNum)) {
+				delRate = atof(trim(line).c_str());
+			}
+			else {
+				cerr << "Error: malformed profile file " << proFile << endl;
+				exit(1);
+			}
+			paraLoadedCount++;
+		}
+		else if(line.compare("[Deletion Frequency]") == 0) {
+			if(getNextLine(ifs, line, lineNum)) {
+				fields = split(line, '\t');
+				if(fields.size() < 1) {
+					cerr << errMsg << lineNum << "\n" << line << endl;
+					exit(1);
+				}
+				delFreqs.resize(1, fields.size(), false);
+				for(j = 0; j < fields.size(); j++) {
+					delFreqs.set(0, j, atof(trim(fields[j]).c_str()));
+				}
+			}
+			else {
+				cerr << "Error: malformed profile file " << proFile << endl;
+				exit(1);
 			}
 			paraLoadedCount++;
 		}
@@ -1012,7 +1229,7 @@ void Profile::load(string proFile) {
 	}
 	ifs.close();
 	
-	if(paraLoadedCount < 6) {
+	if(paraLoadedCount < 9) {
 		cerr << "Error: corrupted model file " << proFile <<
 				", failed to load some parameters!" << endl;
 		exit(1);
@@ -1020,7 +1237,9 @@ void Profile::load(string proFile) {
 	cerr << "profile was loaded from file " << proFile << endl;
 }
 
-void Profile::saveResults(string bamFile, string outFile) {
+void Profile::saveResults() {
+	string bamFile = config.getStringPara("bam");
+	string outFile = config.getStringPara("output");
 	ostream* ost;
 	ofstream ofs;
 	if(!outFile.empty()) {	
@@ -1039,18 +1258,21 @@ void Profile::saveResults(string bamFile, string outFile) {
 	int N = bases.length();
 	int kmer = config.getIntPara("kmer");
 	int binCount = config.getIntPara("bins");
+	int readLength = config.getIntPara("readLength");
 	
 	time_t timel;  
 	time(&timel);     
 	(*ost) << "#model created at " << asctime(gmtime(&timel));
 	(*ost) << "#reads: " << bamFile << endl << endl;
 	(*ost) << "bases: " << bases << endl;
+	(*ost) << "readLength: " << readLength << endl;
 	(*ost) << "binCount: " << binCount << endl;
 	(*ost) << "kmer: " << kmer << endl << endl;
 	
 	int i, j, k, l;
 	double *p;
 	
+	/*
 	(*ost) << "\n[Kmer Distribution]" << endl;
 	p = kmersDist.getEntrance();
 	for(j = 0; j < binCount; j++) {
@@ -1063,6 +1285,25 @@ void Profile::saveResults(string bamFile, string outFile) {
 			}
 		}
 	}
+	*/
+	
+	(*ost) << "\n[Insert Rate]" << endl;
+	(*ost) << insertRate << endl;
+	(*ost) << "[Insert Frequency]" << endl;
+	k = insFreqs.getCOLS();
+	for(i = 0; i < k-1; i++) {
+		(*ost) << insFreqs.get(0, i) << '\t';
+	}
+	(*ost) << insFreqs.get(0, k-1) << endl;
+	
+	(*ost) << "\n[Deletion Rate]" << endl;
+	(*ost) << delRate << endl;
+	(*ost) << "[Deletion Frequency]" << endl;
+	k = delFreqs.getCOLS();
+	for(i = 0; i < k-1; i++) {
+		(*ost) << delFreqs.get(0, i) << '\t';
+	}
+	(*ost) << delFreqs.get(0, k-1) << endl;
 	
 	(*ost) << "\n[Substitution Probs]" << endl;
 	for(i = 0; i < kmerCount; i++) {
@@ -1130,6 +1371,12 @@ void Profile::initCDFs() {
 	int N = bases.length();
 	int binCount = config.getIntPara("bins");
 	
+	//insert
+	insCdf = insFreqs.cumsum();
+	
+	//deletion
+	delCdf = delFreqs.cumsum();
+	
 	//baseQuality
 	int quality_th = 20;
 	int baseQualtiyCount = maxBaseQuality-minBaseQuality+1;
@@ -1192,7 +1439,9 @@ void Profile::train(string proFile) {
 	initCDFs();
 }
 
-void Profile::train(string bamFile, string samtools, string outFile) {
+void Profile::train() {
+	string bamFile = config.getStringPara("bam");
+	string samtools = config.getStringPara("samtools");
 	if(samtools.empty()) {
 		samtools = "samtools";
 	}
@@ -1228,10 +1477,10 @@ void Profile::train(string bamFile, string samtools, string outFile) {
 		initGCParas();
 	}
 	else {	
-		estimateGCParas(outFile);
+		estimateGCParas();
 	}
 	normParas(false);
-	saveResults(bamFile, outFile);
+	saveResults();
 }
 
 int Profile::yieldInsertSize() {
@@ -1267,6 +1516,14 @@ double Profile::getGCFactor(int gc) {
 	return v;
 }
 
+int Profile::getInsertLen() {
+	return randIndx(insCdf.getEntrance(), insCdf.getCOLS());
+}
+
+int Profile::getDelLen() {
+	return randIndx(delCdf.getEntrance(), delCdf.getCOLS());
+}
+
 int Profile::getSubBaseIndx1(char *kmerSeq, int binIndx) {
 	static int N = config.getStringPara("bases").length();
 	static int kmer = config.getIntPara("kmer");
@@ -1297,19 +1554,21 @@ int Profile::getSubBaseIndx2(char *kmerSeq, int binIndx) {
 }
 
 int Profile::getIndelSeq(vector<int> &baseIndxs) {
+	int i, j, n;
 	static int N = config.getStringPara("bases").length();
 	baseIndxs.clear();
 	double p = threadPool->randomDouble(0, 1);
-	if(p <= indelRate) {
-		int i, k;
-		int n = threadPool->randomInteger(1, 51);
-		if(threadPool->randomDouble(0, 1) > 0.5) {
-			for(i = 0; i < n; i++) {
-				k = threadPool->randomInteger(0, N-1);
-				baseIndxs.push_back(k);
-			}
+	if(p <= insertRate) {
+		n = getInsertLen();
+		for(i = 0; i < n; i++) {
+			j = threadPool->randomInteger(0, N-1);
+			baseIndxs.push_back(j);
 		}
 		return n;
+	}
+	p = threadPool->randomDouble(0, 1);
+	if(p < delRate/(1-insertRate)) {
+		return getDelLen();
 	}
 	return 0;
 }

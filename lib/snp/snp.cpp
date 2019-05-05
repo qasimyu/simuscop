@@ -31,7 +31,7 @@ SNP::SNP(string name, long long position, string observed, char strand, char ref
 	}
 
 	frequency = 0;
-	status = unknow;
+	type = unknown;
 }
 
 SNP::SNP(string name, long long position, char ref, char nucleotide) {
@@ -41,7 +41,7 @@ SNP::SNP(string name, long long position, char ref, char nucleotide) {
 	this->nucleotide = nucleotide;
 	
 	frequency = 0;
-	status = unknow;
+	type = unknown;
 }
 
 SNP::SNP(void) {
@@ -78,8 +78,8 @@ float SNP::getFrequency() {
 	return frequency;
 }
 
-snp_status SNP::getStatus() {
-	return status;
+varType SNP::getType() {
+	return type;
 }
 
 char SNP::getComplement(char nucleotide) {
@@ -101,8 +101,8 @@ void SNP::setFrequency(float value) {
 	this->frequency = value;
 }
 
-void SNP::setStatus(snp_status status) {
-	this->status = status;
+void SNP::setType(varType type) {
+	this->type = type;
 }
 
 
@@ -159,7 +159,7 @@ void SNPOnChr::readSNPs(string fname) {
 	char * elems[10];
 	int elemnum;
 	long line_num = 0;
-    	while(fgets(buf, 1000, SNPFile)){
+    while(fgets(buf, 1000, SNPFile)){
 		line_num++;
 		// here assume the snp file is tab-delimited, every line being:
 		// SNP id, chromosome, position, letters, strand, c_ref
@@ -195,92 +195,7 @@ void SNPOnChr::readSNPs(string fname) {
 		    	cerr << buf << endl;
 		    	//exit(1);
         	}
-    	}
-	for(size_t i = 0; i < chromosomes.size(); i++){
-		this->insert(make_pair(chromosomes[i],AllSNP[i]));
-	}
-	
-}
-
-void SNPOnChr::readSNPsFromVCF(string fname) {
-	SNPFile = fopen(fname.c_str(),"r");
-	if(!(SNPFile = fopen(fname.c_str(),"r"))){
-		cerr << "can not open VCF file " << fname << endl;
-		exit(-1);
-	}
-	vector<string> chromosomes;
-	vector<string>::iterator it;
-	vector<vector<SNP> > AllSNP;
-	vector<vector<SNP> >::iterator it2;
-	
-	float quality_th = 20;
-	//float quality_th = 0;
-	int depth_th = 10;
-	snp_num = 0;
-	char buf[20000];
-	char * elems[10];
-	int elemnum;
-	long line_num = 0;
-	int wrong_num = 0;
-    	while(fgets(buf, 20000, SNPFile)){
-		line_num++;
-		if(buf[0] == '#') {
-			continue;		
-		}
-        	elemnum = split(buf, '\t', elems);
-		if(elemnum < 8){
-			cerr << "Warning: malformed VCF file " << fname <<
-                    		", there should be at least 8 fields @line " << line_num << endl;
-            		cerr << buf << endl;
-			wrong_num++;
-			if(wrong_num > 10) {
-				exit(1);
-			}
-			continue;
-			//exit(1);
-		}
-		string info = elems[7];
-		if(info.find("INDEL") != string::npos) {
-			continue;		
-		}
-		if(strlen(elems[3]) > 1 || strlen(elems[4]) > 1) {
-			continue;
-		}
-		size_t indx = info.find("DP=");
-		if(indx != string::npos) {
-			size_t indx1 = info.find(";", indx);
-			int depth = atoi(info.substr(indx+3, indx1-indx-3).c_str());
-			//cerr << depth << endl;
-			if(depth < depth_th)
-				continue;
-		}
-		float quality = atof(elems[5]);
-        	if(quality < quality_th) {
-			continue;
-		}
-		snp_num++;
-		//SNP snp(elems[2], atoll(elems[1]), *elems[3], *elems[4]);
-		SNP snp("", atoll(elems[1]), *elems[3], *elems[4]);
-		string chromosome = elems[0];
-		chromosome = aberOfChr(chromosome);
-		for(it = chromosomes.begin(); it < chromosomes.end(); it++){
-			if(!chromosome.compare(*it)){
-				break;
-			}
-		}
-		if(it < chromosomes.end()){
-			it2 = AllSNP.begin();
-			it2 += (it-chromosomes.begin());
-			(*it2).push_back(snp);
-		}
-		else{
-			vector<SNP> v;
-			v.push_back(snp);
-			AllSNP.push_back(v);
-			chromosomes.push_back(chromosome);
-			//cerr << chromosome << endl;
-		}
-    	}
+    }
 	for(size_t i = 0; i < chromosomes.size(); i++){
 		this->insert(make_pair(chromosomes[i],AllSNP[i]));
 	}

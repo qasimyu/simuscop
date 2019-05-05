@@ -12,50 +12,25 @@
 
 #include "Segment.h"
 #include "snp.h"
+#include "vcfparser.h"
 #include "Fasta.h"
 
 using namespace std;
 
 class CNV {
 	public:
-		CNV() {}
+		CNV() {spos = -1;}
 		CNV(long spos, long epos, float CN, float mCN)
 			: spos(spos), epos(epos), CN(CN), mCN(mCN) {}
-		~CNV() {}
+		long getStartPos() {return spos;}
+		long getEndPos() {return epos;}
+		float getCopyNumber() {return CN;}
+		float getMajorCopyNumber() {return mCN;}
+		
 		long spos;
 		long epos;
 		float CN;
 		float mCN;
-};
-
-class SNV {
-	public:
-		SNV() {}
-		SNV(long pos, char ref, char alt, string type)
-			: pos(pos), ref(ref), alt(alt), type(type) {}
-		~SNV() {}
-		long pos;
-		char ref;
-		char alt;
-		string type;
-};
-
-class Insert {
-	public:
-		Insert() {}
-		Insert(long pos, string seq) : pos(pos), seq(seq) {}
-		~Insert() {}
-		long pos;
-		string seq;
-};
-
-class Del {
-	public:
-		Del() {}
-		Del(long pos, unsigned int len) : pos(pos), len(len) {}
-		~Del() {}
-		long pos;
-		unsigned int len;
 };
 
 class Target {
@@ -63,7 +38,6 @@ class Target {
 		Target() {}
 		Target(long spos, long epos)
 			: spos(spos), epos(epos) {}
-		~Target() {}
 		long spos;
 		long epos;
 };
@@ -95,7 +69,7 @@ class Genome {
 		map<string, PopuData<CNV> > cnvs;
 		map<string, PopuData<SNV> > snvs;
 		map<string, PopuData<Insert> > inserts;
-		map<string, PopuData<Del> > dels;
+		map<string, PopuData<Deletion> > dels;
 		
 		map<string, PopuData<Segment> > segments;
 		map<string, vector<Target> > inTargets;
@@ -103,23 +77,26 @@ class Genome {
 		
 		vector<vector<float> > mixProps;
 		
-		SNPOnChr scReal, scSim;	
+		SNPOnChr sc;
+		VcfParser vcfParser;
 		FastaReference fr;
 		
 		
 		//map<string, string> altSequence;
+		string refSequence;
 		string altSequence;
 	
 		string curPopu;
 		string curChr;
 		
 		void loadAbers();
-		void loadSNPs(string snpFile, int n);
-		void loadRefSeq(string refFile);
+		void loadSNPs();
+		void loadRefSeq();
 		void loadTargets(map<string, vector<Target> >& targets, string targetFile);
 		void loadAbundance();
 		//void generateAltSequence();
-		void generateAltSequence(string chr);
+		//void generateAltSequence(string chr);
+		void generateChrSequence(string chr);
 		void divideTargets(map<string, vector<Target> >& allTargets);
 		
 		void divideSegment(string popu, string chr, long segStartPos, long segEndPos, int CN, int mCN, int &segIndx);
@@ -130,16 +107,19 @@ class Genome {
 		~Genome() {}
 
 		void loadData();
-		void loadData(string vcfFile, string refFile, string targetFile);
+		void loadTrainData();
 
 		vector<string>& getChroms() {return chromosomes;}
 		
-		vector<CNV>& getCNVs(string popu, string chr);
-		vector<SNV>& getSNVs(string popu, string chr);
-		vector<SNP>& getRealSNPs(string chr) {return scReal[chr];}
-		vector<SNP>& getSimuSNPs(string chr) {return scSim[chr];}
-		vector<Insert>& getInserts(string popu, string chr);
-		vector<Del>& getDels(string popu, string chr);
+		vector<CNV>& getSimuCNVs(string popu, string chr);
+		//vector<CNV>& getRealCNVs(string chr);
+		vector<SNV>& getSimuSNVs(string popu, string chr);
+		vector<SNV>& getRealSNVs(string chr) {return vcfParser.getSNVs(chr);}
+		vector<SNP>& getSimuSNPs(string chr) {return sc[chr];}
+		vector<Insert>& getSimuInserts(string popu, string chr);
+		vector<Insert>& getRealInserts(string chr) {return vcfParser.getInserts(chr);}
+		vector<Deletion>& getSimuDels(string popu, string chr);
+		vector<Deletion>& getRealDels(string chr) {return vcfParser.getDels(chr);}
 		vector<Segment>& getSegs(string popu, string chr);
 		vector<Target>& getInTargets(string chr) {return inTargets[chr];}
 		vector<Target>& getOutTargets(string chr) {return outTargets[chr];}
@@ -154,6 +134,7 @@ class Genome {
 		long getTargetLength();
 		
 		char* getSubSequence(string chr, int startPos, int length);
+		char* getSubRefSequence(string chr, int startPos, int length);
 		char* getSubAltSequence(string chr, int startPos, int length);
 		
 		int getSegReadCount(string popu, string chr, int segIndx);
