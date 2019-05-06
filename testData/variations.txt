@@ -1,15 +1,15 @@
-i	test	chr20	4500100	tcgagtcg
-i	test	chr20	11000100	tcgagtc
-i	test	chr20	12000100	tcgagt
-i	test	chr20	44000100	tcgagtcg
-i	test	chr20	57000100	tcgagtc
-i	test	chr20	61000100	tcgagt
-d	test	chr20	3000100	10
-d	test	chr20	5000100	9
-d	test	chr20	9500100	8
-d	test	chr20	48000100	8
-d	test	chr20	58000100	7
-d	test	chr20	62000100	6
+i	test	chr20	4500100	tcgagtcg	homo
+i	test	chr20	11000100	tcgagtc	homo
+i	test	chr20	12000100	tcgagt	het
+i	test	chr20	44000100	tcgagtcg	het
+i	test	chr20	57000100	tcgagtc	homo
+i	test	chr20	61000100	tcgagt	het
+d	test	chr20	3000100	10	homo
+d	test	chr20	5000100	9	het
+d	test	chr20	9500100	8	homo
+d	test	chr20	48000100	8	het
+d	test	chr20	58000100	7	homo
+d	test	chr20	62000100	6	het
 s	test	chr20	2000100	a	T	homo
 s	test	chr20	4000100	T	G	homo
 s	test	chr20	8500100	A	G	het

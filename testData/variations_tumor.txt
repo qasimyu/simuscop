@@ -1,20 +1,20 @@
-i	clone1	chr20	4500100	tcgagtcg
-i	clone1	chr20	11000100	tcgagtc
-i	clone1	chr20	12000100	tcgagt
-i	clone1	chr20	44000100	tcgagtcg
-i	clone1	chr20	57000100	tcgagtc
-i	clone1	chr20	61000100	tcgagt
-i	clone2	chr20	12000100	tcgagt
-i	clone2	chr20	44000100	tcgagtcg
-i	clone2	chr20	57000100	tcgagtc
-d	clone1	chr20	3000100	10
-d	clone1	chr20	5000100	9
-d	clone1	chr20	9500100	8
-d	clone1	chr20	48000100	8
-d	clone1	chr20	58000100	7
-d	clone1	chr20	62000100	6
-d	clone3	chr20	48000100	8
-d	clone3	chr20	58000100	7
+i	clone1	chr20	4500100	tcgagtcg	homo
+i	clone1	chr20	11000100	tcgagtc	het
+i	clone1	chr20	12000100	tcgagt	het
+i	clone1	chr20	44000100	tcgagtcg	homo
+i	clone1	chr20	57000100	tcgagtc	het
+i	clone1	chr20	61000100	tcgagt	het
+i	clone2	chr20	12000100	tcgagt	het
+i	clone2	chr20	44000100	tcgagtcg	homo
+i	clone2	chr20	57000100	tcgagtc	het
+d	clone1	chr20	3000100	10	het
+d	clone1	chr20	5000100	9	het
+d	clone1	chr20	9500100	8	homo
+d	clone1	chr20	48000100	8	het
+d	clone1	chr20	58000100	7	homo
+d	clone1	chr20	62000100	6	het
+d	clone3	chr20	48000100	8	het
+d	clone3	chr20	58000100	7	homo
 s	clone1	chr20	2000100	a	T	homo
 s	clone1	chr20	4000100	T	G	homo
 s	clone1	chr20	8500100	A	G	het
