@@ -861,7 +861,7 @@ void Genome::yieldReads() {
 			swp = new SeqWriter(outFile1, outFile2);
 		}
 		else {
-			string outFile = fqFilePrefix+popuNames[0]+".fastq";
+			string outFile = fqFilePrefix+popuNames[0]+".fq";
 			swp = new SeqWriter(outFile);
 		}
 		
@@ -919,12 +919,12 @@ void Genome::yieldReads() {
 			
 			string fqFilePrefix = config.getStringPara("output")+"/";
 			if(config.isPairedEnd()) {
-				string outFile1 = fqFilePrefix+fn+"_pe_1.fastq";
-				string outFile2 = fqFilePrefix+fn+"_pe_2.fastq";
+				string outFile1 = fqFilePrefix+fn+"_1.fq";
+				string outFile2 = fqFilePrefix+fn+"_2.fq";
 				swp = new SeqWriter(outFile1, outFile2);
 			}
 			else {
-				string outFile = fqFilePrefix+fn+".fastq";
+				string outFile = fqFilePrefix+fn+".fq";
 				swp = new SeqWriter(outFile);
 			}
 			
