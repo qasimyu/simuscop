@@ -22,7 +22,7 @@ name = popu1, popu2, popu3
 abundance = /path/to/abundance.txt
 
 ## [required] output directory
-outputDir = /path/to/outputDir
+output = /path/to/outputDir
 
 ## [optional] sequence layout, should be "SE" or "PE" (default: "SE")
 layout = SE

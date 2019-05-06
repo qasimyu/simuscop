@@ -19,7 +19,7 @@ name = clone1, clone2, clone3, normal
 abundance = ./testData/abundance_tumor.txt
 
 ## [required] output directory
-outputDir = ./results
+output = ./results
 
 ## [optional] sequence layout, should be "SE" for single end or "PE" for paired-end (default: "SE")
 layout = SE

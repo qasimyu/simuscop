@@ -16,7 +16,7 @@ snp = /path/to/hg19_snp138_single_1based.txt
 name = test
 
 ## [required] output directory
-outputDir = /path/to/outputDir
+output = /path/to/outputDir
 
 ## [optional] sequence layout, should be "SE" for single end or "PE" for paired-end (default: "SE")
 layout = PE

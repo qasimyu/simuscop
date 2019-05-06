@@ -16,7 +16,7 @@ snp = ./testData/snp.txt
 name = test
 
 ## [required] output directory
-outputDir = ./results
+output = ./results
 
 ## [optional] sequence layout, should be "SE" for single end or "PE" for paired-end (default: "SE")
 layout = PE

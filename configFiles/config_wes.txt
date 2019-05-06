@@ -19,7 +19,7 @@ target = /path/to/exon_targets.bed
 name = test
 
 ## [required] output directory
-outputDir = /path/to/outputDir
+output = /path/to/outputDir
 
 ## [optional] sequence layout, should be "SE" for single end or "PE" for paired-end (default: "SE")
 layout = PE
