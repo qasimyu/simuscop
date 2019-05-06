@@ -917,7 +917,7 @@ void Genome::yieldReads() {
 				cerr << fn << endl;
 			}
 			
-			string fqFilePrefix = config.getStringPara("outputDir")+"/";
+			string fqFilePrefix = config.getStringPara("output")+"/";
 			if(config.isPairedEnd()) {
 				string outFile1 = fqFilePrefix+fn+"_pe_1.fastq";
 				string outFile2 = fqFilePrefix+fn+"_pe_2.fastq";
