@@ -2,7 +2,7 @@
 // seqToProfile.cpp (c) 2018 Zhenhua Yu <qasim0208@163.com>
 // Health Informatics Lab, Ningxia University
 // All rights reserved.
-
+#include <random>
 #include <iostream>
 #include <string>
 #include <unistd.h>
@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
 	string bamFile = "", targetFile = "";
 	string vcfFile = "", refFile = "";
 	string outFile = "", samtools = "";
-	
+
 	int binCount = 50;
 	int kmer = 3;
 
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
 		cerr << "\nsequencing strategy: WES!" << endl;
 	}
 	*/
-	
+
 	if(vcfFile.empty()){
 		cerr << "Use --vcf to specify the VCF file generated from the normal BAM." << endl;
 		usage(argv[0]);
@@ -110,17 +110,17 @@ int main(int argc, char *argv[]) {
 		cerr << "\nWarning: the path of samtools not specified!" << endl;
 		cerr << "Assume the tool has been installed and included in the system PATH!" << endl;
 	}
-	
+
 	if(kmer < 1 || kmer > 5) {
 		cerr << "Error: parameter \"kmer\" should be a positive integer with maximum value of 5!" << endl;
 		exit(1);
 	}
-	
+
 	if(binCount < 10) {
 		cerr << "Error: parameter \"bins\" should be a positive integer with minimum value of 10!" << endl;
 		exit(1);
 	}
-	
+
 	config.setIntPara("kmer", kmer);
 	config.setIntPara("bins", binCount);
 	config.setStringPara("bam", bamFile);
@@ -129,20 +129,20 @@ int main(int argc, char *argv[]) {
 	config.setStringPara("vcf", vcfFile);
 	config.setStringPara("target", targetFile);
 	config.setStringPara("ref", refFile);
-	
+
 	/*** load data ***/
 	genome.loadTrainData();
 
 	/*** profile learning ***/
 	profile.init();
 	profile.train();
-	
+
 	end_t = time(NULL);
 	time_used = end_t-start_t;
 	int minutes = time_used/60;
 	int seconds = time_used - minutes*60;
 	cerr << "\nElapsed time: " << minutes << " minutes and " << seconds << " seconds!\n" << endl;
-	
+
 	return 0;
 }
 
@@ -168,4 +168,3 @@ void usage(const char* app) {
 		<< endl
 		<< "Author: Zhenhua Yu <qasim0208@163.com>\n" << endl;
 }
-

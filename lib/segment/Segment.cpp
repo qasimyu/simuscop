@@ -2,7 +2,7 @@
 // Segment.cpp (c) 2018 Zhenhua Yu <qasim0208@163.com>
 // Health Informatics Lab, Ningxia University
 // All rights reserved.
-
+#include <random>
 #include <cstdio>
 #include <iostream>
 #include <fstream>
@@ -28,14 +28,14 @@ Segment::Segment(int segIndx, string segChr, long segStartPos, long segEndPos) {
 	this->CN = 2;
 	this->mCN = 1;
 	this->segSequences = NULL;
-	
+
 	readCount = 0;
 	gcFactor = -1;
 
 	initTargets();
-	
+
 	//threadFunc = &yieldReads;
-	
+
 	//yieldSegmentSequence();
 }
 
@@ -53,14 +53,14 @@ Segment::Segment(int segIndx, string segChr, long segStartPos, long segEndPos, i
 	this->CN = CN;
 	this->mCN = mCN;
 	this->segSequences = NULL;
-	
+
 	readCount = 0;
 	gcFactor = -1;
 
 	initTargets();
 
 	//threadFunc = &yieldReads;
-	
+
 	//yieldSegmentSequence();
 }
 
@@ -127,7 +127,7 @@ void Segment::generateSegSequences() {
 	vector<SNV>& snvsOfChr = genome.getSimuSNVs(genome.getCurrentPopu(), segChr);
 	vector<Insert>& insertsOfChr = genome.getSimuInserts(genome.getCurrentPopu(), segChr);
 	vector<Deletion>& delsOfChr = genome.getSimuDels(genome.getCurrentPopu(), segChr);
-	
+
 	if(CN == 0) {
 		segSequences = NULL;
 		return;
@@ -141,11 +141,11 @@ void Segment::generateSegSequences() {
 	}
 
 	transform(refSeq, refSeq+strlen(refSeq), refSeq, (int (*)(int))toupper);
-	
+
 	int i, j, k;
 	unsigned int refSize = strlen(refSeq);
 	vector<int>::iterator it;
-	
+
 	if(mIndx.empty()) {
 		if(CN < ploidy) {
 			for(i = 0; i < CN; i++) {
@@ -206,7 +206,7 @@ void Segment::generateSegSequences() {
 			}
 		}
 	}
-	
+
 	vector<string> segSeqs;
 	if(CN < ploidy) {
 		for(i = 0; i < ploidy; i++) {
@@ -230,7 +230,7 @@ void Segment::generateSegSequences() {
 	}
 
 	delete[] refSeq;
-	
+
 	//simu SNP
 	k = 0;
 	for(i = 0; i < snpsOfChr.size(); i++) {
@@ -263,7 +263,7 @@ void Segment::generateSegSequences() {
 			k = (k+1)%2;
 		}
 	}
-	
+
 	//simu SNV
 	k = 0;
 	for(i = 0; i < snvsOfChr.size(); i++) {
@@ -309,7 +309,7 @@ void Segment::generateSegSequences() {
 			}
 		}
 	}
-	
+
 	//simu Insert
 	map<int, map<int, int> > insertsPerhaploidy;
 	map<int, int>::iterator m_it;
@@ -368,7 +368,7 @@ void Segment::generateSegSequences() {
 			}
 		}
 	}
-	
+
 	//simu Deletion
 	map<int, map<int, int> > delsPerhaploidy;
 	int* delLens = new int[ploidy];
@@ -444,7 +444,7 @@ void Segment::generateSegSequences() {
 	}
 	delete[] insertLens;
 	delete[] delLens;
-	
+
 	segSequences = new char*[ploidy];
 	for(i = 0; i < ploidy; i++) {
 		if(segSeqs[i].length() == 0) {
@@ -456,7 +456,7 @@ void Segment::generateSegSequences() {
 			transform(segSequences[i], segSequences[i]+strlen(segSequences[i]), segSequences[i], (int (*)(int))toupper);
 		}
 	}
-	
+
 }
 
 void Segment::setReadCount(long readCount) {
@@ -517,7 +517,7 @@ double Segment::getWeightedLength() {
 		}
 		else if(!targetIndxs.empty()) {
 			vector<Target>& targetsOfChr = genome.getOutTargets(segChr);
-			
+
 			for(i = 0; i < targetIndxs.size(); i++) {
 				j = targetIndxs[i];
 				long spos = max(targetsOfChr[j].spos, segStartPos) - segStartPos;
@@ -649,7 +649,7 @@ unsigned int Segment::getSeqSize() {
 	for(int i = 0; i < ploidy; i++) {
 		if(segSequences[i] != NULL) {
 			seqSize += strlen(segSequences[i]);
-		}	
+		}
 	}
 	return seqSize;
 }
@@ -689,9 +689,9 @@ void* Segment::yieldReads(const void* args) {
 	bool paired = config.isPairedEnd();
 	int seqLen, readLength = config.getIntPara("readLength");
 	int ploidy = config.getIntPara("ploidy");
-	
+
 	//cerr << "Number of reads to sample on the segment: " << seg->getReadCount() << endl;
-	
+
 	unsigned long bufferSize = 50000000;
 	char buf[10*readLength], buf1[10*readLength], buf2[10*readLength];
 	char *results;
@@ -705,15 +705,15 @@ void* Segment::yieldReads(const void* args) {
 	else {
 		outBuffer = new char[bufferSize];
 	}
-	
+
 	int i, j, k;
-	
+
 	unsigned int refSize = seg->getRefSize();
 	unsigned int seqSize, segsize;
 	seqSize = seg->getSeqSize();
 	segsize = seqSize/CN;
-	
-	
+
+
 	vector<int> segSeqIndxs;
 	vector<int> cnStartCount;
 	int count = 0;
@@ -728,10 +728,10 @@ void* Segment::yieldReads(const void* args) {
 			segSeqIndxs.push_back(i);
 		}
 	}
-	
+
 	int fragCount = 0;
 	int lastSegIndx, fragIndx;
-	
+
 	for(i = 0; i < fragStartPos.size(); i++) {
 		long spos = fragStartPos[i];
 		long epos = fragEndPos[i];
@@ -747,9 +747,9 @@ void* Segment::yieldReads(const void* args) {
 			}
 			else {
 				int insertSize = profile.yieldInsertSize();
-				fragSeq = getFragSequence(seg, hapIndx, pos, insertSize);			
+				fragSeq = getFragSequence(seg, hapIndx, pos, insertSize);
 			}
-			
+
 			if(fragSeq == NULL || strlen(fragSeq) < readLength) {
 				if(fragSeq != NULL) {
 					delete[] fragSeq;
@@ -759,9 +759,9 @@ void* Segment::yieldReads(const void* args) {
 					break;
 				}
 				continue;
-			}			
+			}
 			fragCount++;
-			
+
 			if(!paired) {
 				k = threadPool->randomInteger(0, 2);
 				if(k == 0) {
@@ -786,7 +786,7 @@ void* Segment::yieldReads(const void* args) {
 				buf[k+2*seqLen+3] = '\n';
 				buf[k+2*seqLen+4] = '\0';
 				delete[] results;
-				
+
 				if(strlen(buf)+outIndx < bufferSize) {
 					strcpy(&outBuffer[outIndx], buf);
 					outIndx += strlen(buf);
@@ -796,7 +796,7 @@ void* Segment::yieldReads(const void* args) {
 					strcpy(outBuffer, buf);
 					outIndx = strlen(buf);
 				}
-				
+
 				n--;
 			}
 			else {
@@ -804,7 +804,7 @@ void* Segment::yieldReads(const void* args) {
 				fragSeq[readLength] = '\0';
 				results = profile.predict(fragSeq, 1);
 				fragSeq[readLength] = c;
-				
+
 				k = 0;
 				sprintf(&buf1[k], "@%s#%s#%ld#%d/1\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
 				k = strlen(buf1);
@@ -815,7 +815,7 @@ void* Segment::yieldReads(const void* args) {
 				buf1[k+2*seqLen+3] = '\n';
 				buf1[k+2*seqLen+4] = '\0';
 				delete[] results;
-				
+
 				char* seq = &fragSeq[strlen(fragSeq)-readLength];
 				seq = getComplementSeq(seq);
 				reverse(seq, seq+readLength);
@@ -830,7 +830,7 @@ void* Segment::yieldReads(const void* args) {
 				buf2[k+2*seqLen+3] = '\n';
 				buf2[k+2*seqLen+4] = '\0';
 				delete[] results;
-				
+
 				if(strlen(buf1)+outIndx1 < bufferSize && strlen(buf2)+outIndx2 < bufferSize) {
 					strcpy(&outBuffer1[outIndx1], buf1);
 					strcpy(&outBuffer2[outIndx2], buf2);
@@ -844,15 +844,15 @@ void* Segment::yieldReads(const void* args) {
 					outIndx1 = strlen(buf1);
 					outIndx2 = strlen(buf2);
 				}
-				
+
 				n -= 2;
 			}
-			
+
 			delete[] fragSeq;
 		}
 	}
-	
-	
+
+
 	if(paired) {
 		if(strlen(outBuffer1) > 0) {
 			swp->write(outBuffer1, outBuffer2);
@@ -866,7 +866,7 @@ void* Segment::yieldReads(const void* args) {
 		}
 		delete[] outBuffer;
 	}
-	
+
 	return NULL;
 }
 
@@ -889,9 +889,9 @@ void* Segment::yieldReads(const void* args) {
 	bool paired = config.isPairedEnd();
 	int seqLen, readLength = config.getIntPara("readLength");
 	int ploidy = config.getIntPara("ploidy");
-	
+
 	//cerr << "Number of reads to sample on the segment: " << seg->getReadCount() << endl;
-	
+
 	unsigned long bufferSize = 50000000;
 	char buf[10*readLength], buf1[10*readLength], buf2[10*readLength];
 	char *results;
@@ -905,15 +905,15 @@ void* Segment::yieldReads(const void* args) {
 	else {
 		outBuffer = new char[bufferSize];
 	}
-	
+
 	int i, j, k;
-	
+
 	unsigned int refSize = seg->getRefSize();
 	unsigned int seqSize, segsize;
 	seqSize = seg->getSeqSize();
 	segsize = seqSize/CN;
-	
-	
+
+
 	vector<int> segSeqIndxs;
 	vector<int> cnStartCount;
 	int count = 0;
@@ -928,10 +928,10 @@ void* Segment::yieldReads(const void* args) {
 			segSeqIndxs.push_back(i);
 		}
 	}
-	
+
 	int fragCount = 0;
 	int lastSegIndx, fragIndx;
-	
+
 	for(i = 0; i < fragStartPos.size(); i++) {
 		long spos = fragStartPos[i];
 		long epos = fragEndPos[i];
@@ -950,9 +950,9 @@ void* Segment::yieldReads(const void* args) {
 			}
 			else {
 				int insertSize = profile.yieldInsertSize();
-				fragSeq = getFragSequence(seg, j, pos, insertSize);			
+				fragSeq = getFragSequence(seg, j, pos, insertSize);
 			}
-			
+
 			if(fragSeq == NULL || strlen(fragSeq) < readLength) {
 				if(fragSeq != NULL) {
 					delete[] fragSeq;
@@ -962,9 +962,9 @@ void* Segment::yieldReads(const void* args) {
 					break;
 				}
 				continue;
-			}			
+			}
 			fragCount++;
-			
+
 			if(!paired) {
 				k = threadPool->randomInteger(0, 2);
 				if(k == 0) {
@@ -989,7 +989,7 @@ void* Segment::yieldReads(const void* args) {
 				buf[k+2*seqLen+3] = '\n';
 				buf[k+2*seqLen+4] = '\0';
 				delete[] results;
-				
+
 				if(strlen(buf)+outIndx < bufferSize) {
 					strcpy(&outBuffer[outIndx], buf);
 					outIndx += strlen(buf);
@@ -999,7 +999,7 @@ void* Segment::yieldReads(const void* args) {
 					strcpy(outBuffer, buf);
 					outIndx = strlen(buf);
 				}
-				
+
 				n--;
 			}
 			else {
@@ -1007,7 +1007,7 @@ void* Segment::yieldReads(const void* args) {
 				fragSeq[readLength] = '\0';
 				results = profile.predict(fragSeq, 1);
 				fragSeq[readLength] = c;
-				
+
 				k = 0;
 				sprintf(&buf1[k], "@%s#%s#%ld#%d/1\n", genome.getCurrentPopu().c_str(), segChr.c_str(), pos%segsize, fragCount);
 				k = strlen(buf1);
@@ -1018,7 +1018,7 @@ void* Segment::yieldReads(const void* args) {
 				buf1[k+2*seqLen+3] = '\n';
 				buf1[k+2*seqLen+4] = '\0';
 				delete[] results;
-				
+
 				char* seq = &fragSeq[strlen(fragSeq)-readLength];
 				seq = getComplementSeq(seq);
 				reverse(seq, seq+readLength);
@@ -1033,7 +1033,7 @@ void* Segment::yieldReads(const void* args) {
 				buf2[k+2*seqLen+3] = '\n';
 				buf2[k+2*seqLen+4] = '\0';
 				delete[] results;
-				
+
 				if(strlen(buf1)+outIndx1 < bufferSize && strlen(buf2)+outIndx2 < bufferSize) {
 					strcpy(&outBuffer1[outIndx1], buf1);
 					strcpy(&outBuffer2[outIndx2], buf2);
@@ -1047,15 +1047,15 @@ void* Segment::yieldReads(const void* args) {
 					outIndx1 = strlen(buf1);
 					outIndx2 = strlen(buf2);
 				}
-				
+
 				n -= 2;
 			}
-			
+
 			delete[] fragSeq;
 		}
 	}
-	
-	
+
+
 	if(paired) {
 		if(strlen(outBuffer1) > 0) {
 			swp->write(outBuffer1, outBuffer2);
@@ -1069,7 +1069,7 @@ void* Segment::yieldReads(const void* args) {
 		}
 		delete[] outBuffer;
 	}
-	
+
 	return NULL;
 }
 */

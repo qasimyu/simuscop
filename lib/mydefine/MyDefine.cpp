@@ -2,7 +2,7 @@
 // MyDefine.cpp (c) 2018 Zhenhua Yu <qasim0208@163.com>
 // Health Informatics Lab, Ningxia University
 // All rights reserved.
-
+#include <random>
 #include <vector>
 
 #include "MyDefine.h"
@@ -70,10 +70,10 @@ Matrix<int> randsrc(int m, int n, Matrix<int> alphabet, Matrix<double> aprob, bo
 	if(m <= 0 || n <= 0) {
 		return ret;
 	}
-	
+
 	assert(alphabet.getROWS() == 1 && alphabet.getCOLS() > 0);
 	assert(aprob.getROWS() == 1 && aprob.getCOLS() == alphabet.getCOLS());
-	
+
 	Matrix<double> prob;
 	if(iscdf) {
 		prob = aprob;
@@ -83,7 +83,7 @@ Matrix<int> randsrc(int m, int n, Matrix<int> alphabet, Matrix<double> aprob, bo
 	}
 
 	srand(time(0));
-	
+
 	ret.resize(m, n, false);
 	int* p = ret.getEntrance();
 	int i, j, k;
@@ -92,7 +92,7 @@ Matrix<int> randsrc(int m, int n, Matrix<int> alphabet, Matrix<double> aprob, bo
 			p[i*n+j] = randsrc(alphabet, prob, true);
 		}
 	}
-	
+
 	return ret;
 }
 
@@ -100,7 +100,7 @@ Matrix<int> randsrc(int m, int n, Matrix<int> alphabet, Matrix<double> aprob, bo
 int randsrc(Matrix<int>& alphabet, Matrix<double>& aprob, bool iscdf) {
 	assert(alphabet.getROWS() == 1 && alphabet.getCOLS() > 0);
 	assert(aprob.getROWS() == 1 && aprob.getCOLS() == alphabet.getCOLS());
-	
+
 	int ac = aprob.getCOLS();
 	double* p1;
 	if(iscdf) {
@@ -110,7 +110,7 @@ int randsrc(Matrix<int>& alphabet, Matrix<double>& aprob, bool iscdf) {
 		Matrix<double> prob = aprob.cumsum();
 		p1 = prob.getEntrance();
 	}
-	
+
 	int* p2 = alphabet.getEntrance();
 	double r = randomDouble(ZERO_FINAL, 1);
 	for(size_t k = 0; k < ac; k++) {
@@ -127,9 +127,9 @@ Matrix<int> randIndx(int m, int n, Matrix<double> aprob, bool iscdf) {
 	if(m <= 0 || n <= 0) {
 		return ret;
 	}
-	
+
 	assert(aprob.getROWS() == 1 && aprob.getCOLS() >= 1);
-	
+
 	Matrix<double> prob;
 	if(iscdf) {
 		prob = aprob;
@@ -139,7 +139,7 @@ Matrix<int> randIndx(int m, int n, Matrix<double> aprob, bool iscdf) {
 	}
 
 	srand(time(0));
-	
+
 	ret.resize(m, n, false);
 	int* p = ret.getEntrance();
 	int i, j, k;
@@ -148,7 +148,7 @@ Matrix<int> randIndx(int m, int n, Matrix<double> aprob, bool iscdf) {
 			p[i*n+j] = randIndx(prob, true);
 		}
 	}
-	
+
 	return ret;
 }
 
@@ -163,7 +163,7 @@ int randIndx(Matrix<double>& aprob, bool iscdf) {
 		prob = aprob.cumsum();
 		p1 = prob.getEntrance();
 	}
-	
+
 	double r = randomDouble(ZERO_FINAL, 1);
 	for(size_t k = 0; k < ac; k++) {
 		if(r <= p1[k]) {
@@ -328,5 +328,3 @@ double calculateGCContent(char* sequence) {
 	}
 	return 1.0*gcCount/(n-nCount);
 }
-
-
