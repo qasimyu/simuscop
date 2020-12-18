@@ -2,7 +2,7 @@
 // Config.cpp (c) 2018 Zhenhua Yu <qasim0208@163.com>
 // Health Informatics Lab, Ningxia University
 // All rights reserved.
-
+#include <random>
 #include <iostream>
 #include <fstream>
 #include <cassert>
@@ -15,9 +15,9 @@ Config::Config() {
 	configFile = "";
 	string strParaNames[] = {"bam", "profile", "ref", "variation", "snp", "vcf", "target",
 							"bases", "output", "abundance", "layout", "samtools"};
-	
+
 	/*---start default configuration---*/
-	
+
 	int n = sizeof(strParaNames)/sizeof(string);
 	for(int i = 0; i < n; i++) {
 		if(strParaNames[i].compare("layout") == 0) {
@@ -38,7 +38,7 @@ Config::Config() {
 	intParas.insert(make_pair("coverage", 0));
 	intParas.insert(make_pair("ploidy", 2));
 	intParas.insert(make_pair("insertSize", 350));
-	
+
 	realParas.insert(make_pair("indelRate", 0.00025));
 	/*---end default configuration---*/
 }
@@ -54,7 +54,7 @@ void Config::loadConfig() {
 		cerr << "Error: can not open configuration file" << configFile << endl;
 		exit(-1);
 	}
-	
+
 	string line;
 	int lineNum = 0, indx;
 	while(getline(ifs, line)) {
@@ -71,7 +71,7 @@ void Config::loadConfig() {
 		}
 		string key = trim(line.substr(0, indx));
 		string value = trim(line.substr(indx+1));
-		
+
 		if(stringParas.find(key) != stringParas.end()) {
 			stringParas[key] = value;
 		}
@@ -94,7 +94,7 @@ void Config::loadConfig() {
 		}
 	}
 	ifs.close();
-	
+
 	checkParas();
 }
 
@@ -127,7 +127,7 @@ void Config::checkParas() {
 		cerr << "Error: output directory not specified!" << endl;
 		exit(1);
 	}
-	
+
 	if(stringParas["layout"].empty()) {
 		cerr << "Warning: sequence layout not specified!" << endl;
 		cerr << "use the default value: \"single end\"" << endl;
@@ -138,7 +138,7 @@ void Config::checkParas() {
 		cerr << "should be SE or PE" << endl;
 		exit(1);
 	}
-	
+
 	if(intParas["threads"] < 1) {
 		cerr << "Error: number of threads should be a positive integer!" << endl;
 		exit(1);
@@ -161,12 +161,12 @@ void Config::checkParas() {
 		cerr << "Error: insert size should be not smaller than read length!" << endl;
 		exit(1);
 	}
-	
+
 	if(realParas["indelRate"] < 0 || realParas["indelRate"] > 0.001) {
 		cerr << "Error: indel error rate should be a value between 0 to 0.001!" << endl;
 		exit(1);
 	}
-	
+
 	string tmp = stringParas["outputDir"];
 	if(tmp[tmp.length()-1] == '/') {
 		tmp.erase(tmp.end()-1);

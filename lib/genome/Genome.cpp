@@ -2,7 +2,7 @@
 // Genome.cpp (c) 2018 Zhenhua Yu <qasim0208@163.com>
 // Health Informatics Lab, Ningxia University
 // All rights reserved.
-
+#include <random>
 #include <iostream>
 #include <fstream>
 #include <cassert>
@@ -25,7 +25,7 @@ void Genome::loadData() {
 	loadTargets(outTargets, config.getStringPara("target"));
 	divideTargets(outTargets);
 	loadAbundance();
-	
+
 	curChr = "nodefined";
 }
 
@@ -44,16 +44,16 @@ void Genome::loadAbers() {
 		return;
 	}
 	vector<string>& popuNames = config.getPopuNames();
-	
+
 	ifstream ifs;
 	ifs.open(aberFile.c_str());
 	if(!ifs.is_open()) {
 		cerr << "can not open file " << aberFile << endl;
 		exit(-1);
 	}
-	
+
 	vector<string>::iterator v_it;
-	
+
 	string line;
 	int lineNum = 0;
 	int cnvCount = 0, snvCount = 0, insertCount = 0, delCount = 0;
@@ -64,7 +64,7 @@ void Genome::loadAbers() {
 		}
 		//cerr << line << "\n\t";
 		vector<string> fields = split(line,'\t');
-		
+
 		string aberType = fields[0];
 		//CNV
 		if(aberType.compare("c") == 0) {
@@ -240,14 +240,14 @@ void Genome::loadTargets(map<string, vector<Target> >& targets, string targetFil
 		return;
 	}
 	map<string, vector<Target> >::iterator m_it;
-	
+
 	ifstream ifs;
 	ifs.open(targetFile.c_str());
 	if(!ifs.is_open()) {
 		cerr << "can not open target file " << targetFile << endl;
 		exit(-1);
 	}
-	
+
 	string line;
 	int lineNum = 0;
 	int targetNum = 0;
@@ -260,14 +260,14 @@ void Genome::loadTargets(map<string, vector<Target> >& targets, string targetFil
 			cerr << line << endl;
 			exit(1);
 		}
-		
+
         string chr = abbrOfChr(fields[0]);
 		long chrLen = getChromLen(chr);
 		if(chrLen <= 0) {
 			continue;
 		}
 		Target target;
-		target.spos = max((long) 1, atol(fields[1].c_str())-50+1); // 0-based 
+		target.spos = max((long) 1, atol(fields[1].c_str())-50+1); // 0-based
 		//target.epos = min(chrLen, atol(fields[2].c_str())+50); // 1-based
 		long tmp;
 		if(atol(fields[2].c_str()) <= 0) {
@@ -299,16 +299,16 @@ void Genome::loadAbundance() {
 	if(abundanceFile.empty()) {
 		return;
 	}
-	
+
 	vector<string>& popuNames = config.getPopuNames();
-	
+
 	ifstream ifs;
 	ifs.open(abundanceFile.c_str());
 	if(!ifs.is_open()) {
 		cerr << "can not open abundance file " << abundanceFile << endl;
 		exit(-1);
 	}
-	
+
 	string line;
 	int lineNum = 0;
 	while(getline(ifs,line)) {
@@ -449,20 +449,20 @@ char* Genome::getSubAltSequence(string chr, int startPos, int length) {
 	return s;
 }
 
-void Genome::generateChrSequence(string chr) {	
+void Genome::generateChrSequence(string chr) {
 	unsigned int i, j;
 	vector<string>::iterator it = find(chromosomes.begin(), chromosomes.end(), chr);
 	if(it == chromosomes.end()) {
-		cerr << "ERROR: unrecognized chromosome identifier \"" << chr 
+		cerr << "ERROR: unrecognized chromosome identifier \"" << chr
 			 << "\" when generating alternative sequence!" << endl;
 		exit(1);
 	}
-	
+
 	curChr = chr;
 	vector<SNV>& snvsOfChr = getRealSNVs(chr);
 	vector<Insert>& insertsOfChr = getRealInserts(chr);
 	vector<Deletion>& delsOfChr = getRealDels(chr);
-	
+
 	refSequence = fr.getSubSequence(chr, 0, getChromLen(chr));
 	altSequence = refSequence;
 	for(j = 0; j < snvsOfChr.size(); j++) {
@@ -490,14 +490,14 @@ void Genome::generateChrSequence(string chr) {
 			insertsPerhaploidy[0].insert(make_pair(pos, seq.length()));
 		}
 	}
-	
+
 	int delLens[] = {0, 0};
 	int offset;
 	for(j = 0; j < delsOfChr.size(); j++) {
 		Deletion del = delsOfChr[j];
 		long pos = del.getPosition();
 		int length = del.getLength();
-		
+
 		offset = 0;
 		map<long, int>& insertedSeq = insertsPerhaploidy[1];
 		for(m_it = insertedSeq.begin(); m_it!= insertedSeq.end(); m_it++) {
@@ -531,15 +531,15 @@ void Genome::generateChrSequence(string chr) {
 }
 
 /*
-void Genome::generateAltSequence(string chr) {	
+void Genome::generateAltSequence(string chr) {
 	int i, j;
 	vector<string>::iterator it = find(chromosomes.begin(), chromosomes.end(), chr);
 	if(it == chromosomes.end()) {
-		cerr << "ERROR: unrecognized chromosome identifier \"" << chr 
+		cerr << "ERROR: unrecognized chromosome identifier \"" << chr
 			 << "\" when generating alternative sequence!" << endl;
 		exit(1);
 	}
-	
+
 	curChr = chr;
 	vector<SNP>& snpsOfChr = getRealSNPs(chr);
 	altSequence = fr.getSubSequence(chr, 0, getChromLen(chr));
@@ -602,7 +602,7 @@ char* Genome::produceFragment(string popu, string chr, int startSegIndx, int seg
 	if(fragLen <= 0) {
 		return NULL;
 	}
-	
+
 	int i, len = 0;
 	char* fragSeq = new char[fragLen+1];
 	char* segSeq;
@@ -636,7 +636,7 @@ void Genome::generateSegments() {
 	vector<string>& popuNames = config.getPopuNames();
 	int ploidy = config.getIntPara("ploidy");
 	int mCN = (int) ceil((float) ploidy/2);
-	
+
 	if(!outTargets.empty()) {
 		map<string, vector<Target> >::iterator it;
 		chromosomes.clear();
@@ -645,7 +645,7 @@ void Genome::generateSegments() {
 			for(i = 0; i < chromosomes.size(); i++) {
 				if(chr.compare(chromosomes[i]) == 0) {
 					break;
-				}		
+				}
 			}
 			if(i == chromosomes.size()) {
 				chromosomes.push_back(chr);
@@ -659,8 +659,8 @@ void Genome::generateSegments() {
 			int segIndx = 0;
 			vector<CNV>& cnvsOfChr = getSimuCNVs(popu, chr);
 			long segStartPos = 1, segEndPos = -1;
-			
-			for(k = 0; k < cnvsOfChr.size(); k++) {		
+
+			for(k = 0; k < cnvsOfChr.size(); k++) {
 				if(segStartPos > getChromLen(chr)) {
 					break;
 				}
@@ -678,7 +678,7 @@ void Genome::generateSegments() {
 			}
 		}
 	}
-	
+
 }
 
 void Genome::divideTargets(map<string, vector<Target> >& allTargets) {
@@ -730,12 +730,12 @@ void Genome::divideTargets(map<string, vector<Target> >& allTargets) {
 					vector<Target> temp;
 					temp.push_back(newTarget);
 					newTargets.insert(make_pair(chr, temp));
-				}	
+				}
 			}
 		}
 	}
 	allTargets = newTargets;
-	
+
 }
 
 void Genome::divideSegment(string popu, string chr, long segStartPos, long segEndPos, int CN, int mCN, int &segIndx) {
@@ -795,7 +795,7 @@ void Genome::setReadCounts(string popu, long reads) {
 		WL += chrWL;
 		chrWLens.insert(make_pair(chr, chrWL));
 	}
-	
+
 	long curReads = 0;
 	long chrReads;
 	for(i = 0; i < chromosomes.size(); i++) {
@@ -824,15 +824,15 @@ void Genome::setReadCounts(string popu, long reads) {
 	}
 }
 
-void Genome::yieldReads() {	
+void Genome::yieldReads() {
 	int i, j, k, m, n = 0;
 	vector<string>& popuNames = config.getPopuNames();
-	
+
 	long reads = getTargetLength()*config.getIntPara("coverage")/config.getIntPara("readLength");
-	if(config.isVerbose()) {	
+	if(config.isVerbose()) {
 		cerr << "\nNumber of reads to sample: " << reads << endl;
 	}
-	
+
 	map<string, double> ACNs;
 	map<string, double>::iterator it;
 	calculateACNs(ACNs);
@@ -847,13 +847,13 @@ void Genome::yieldReads() {
 			cerr << it->first << ": " << it->second << endl;
 		}
 	}
-	
+
 	cerr << "\n*****Generating samples*****" << endl;
 	srand(time(0));
-	
+
 	if(mixProps.empty()) {
 		curPopu = popuNames[0];
-		
+
 		string fqFilePrefix = config.getStringPara("output")+"/";
 		if(config.isPairedEnd()) {
 			string outFile1 = fqFilePrefix+popuNames[0]+"_1.fq";
@@ -864,21 +864,21 @@ void Genome::yieldReads() {
 			string outFile = fqFilePrefix+popuNames[0]+".fq";
 			swp = new SeqWriter(outFile);
 		}
-		
+
 		setReadCounts(popuNames[0], reads);
 		PopuData<Segment>& segsOfPopu = segments[popuNames[0]];
 		for(j = 0; j < chromosomes.size(); j++) {
 			string chr = chromosomes[j];
 			curChr = chr;
-			
+
 			vector<Segment>& chrSegs = segsOfPopu[chr];
-			
+
 			for(k = 0; k < chrSegs.size(); k++) {
-				chrSegs[k].generateSegSequences(); 
+				chrSegs[k].generateSegSequences();
 			}
 			for(k = 0; k < chrSegs.size(); k++) {
 				//Segment::yieldReads(&chrSegs[k]);
-				threadPool->pool_add_work(&Segment::yieldReads, &chrSegs[k], n++); 
+				threadPool->pool_add_work(&Segment::yieldReads, &chrSegs[k], n++);
 			}
 			threadPool->wait();
 			for(k = 0; k < chrSegs.size(); k++) {
@@ -916,7 +916,7 @@ void Genome::yieldReads() {
 				cerr << "\nfile name:" << endl;
 				cerr << fn << endl;
 			}
-			
+
 			string fqFilePrefix = config.getStringPara("output")+"/";
 			if(config.isPairedEnd()) {
 				string outFile1 = fqFilePrefix+fn+"_1.fq";
@@ -927,26 +927,26 @@ void Genome::yieldReads() {
 				string outFile = fqFilePrefix+fn+".fq";
 				swp = new SeqWriter(outFile);
 			}
-			
+
 			for(i = 0; i < popuNames.size(); i++) {
 				string popu = popuNames[i];
 				curPopu = popu;
-				
+
 				long popuReads = reads*props[i]*ACNs[popu]/w_acn;
 				setReadCounts(popu, popuReads);
 				PopuData<Segment>& segsOfPopu = segments[popu];
 				for(j = 0; j < chromosomes.size(); j++) {
 					string chr = chromosomes[j];
 					curChr = chr;
-					
+
 					vector<Segment>& chrSegs = segsOfPopu[chr];
-					
+
 					for(k = 0; k < chrSegs.size(); k++) {
 						chrSegs[k].generateSegSequences();
 					}
 					for(k = 0; k < chrSegs.size(); k++) {
 						//Segment::yieldReads(&chrSegs[k]);
-						threadPool->pool_add_work(&Segment::yieldReads, &chrSegs[k], n++); 
+						threadPool->pool_add_work(&Segment::yieldReads, &chrSegs[k], n++);
 					}
 					threadPool->wait();
 					for(k = 0; k < chrSegs.size(); k++) {
@@ -958,5 +958,3 @@ void Genome::yieldReads() {
 		}
 	}
 }
-
-
